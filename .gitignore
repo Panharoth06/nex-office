@@ -1,0 +1,27 @@
+# Node & Nuxt dependencies
+node_modules/
+.nuxt/
+.output/
+dist/
+dist-ssr/
+*.local
+
+# Rust & WebAssembly artifacts
+target/
+pkg/
+Cargo.lock
+**/*.rs.bk
+
+# Logs and runtime databases
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Reference submodules/clones (keep local, do not re-commit nested repos)
+reference/*/.git
