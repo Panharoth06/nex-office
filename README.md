@@ -1,65 +1,106 @@
 # Office Engine
 
-> A high-performance, canvas-rendered collaborative document engine built with **Rust (WebAssembly)**, **Google Skia (`canvaskit-wasm`)**, and **Nuxt 3**.
+> A high-performance, Google Docs-caliber collaborative document suite and canvas rendering engine built with **Rust (WebAssembly)**, **Google Skia (`canvaskit-wasm`)**, **Loro CRDT**, and **Nuxt 3**.
 
 ---
 
 ## Overview
 
-**Office Engine** is designed from the ground up to achieve Google Docs-level typing performance, typography fidelity, and responsiveness. Instead of relying on traditional HTML DOM editing (`contenteditable`), which suffers from browser layout thrashing and garbage-collection stutters on large documents, Office Engine renders text and document elements directly onto a hardware-accelerated WebGL/WebGPU surface.
+**Office Engine** is a full-featured collaborative document editing platform designed to deliver Google Docs parity in performance, typography fidelity, and real-time multiplayer co-authoring.
 
-### Key Architectural Highlights
-- **Deterministic 60/120 FPS Performance:** Document state, text layout, and pagination are executed in a high-speed **Rust** core compiled to WebAssembly.
-- **Hardware-Accelerated Google Skia Rendering:** Uses `canvaskit-wasm` (the exact C++ 2D graphics engine powering Chrome and Flutter) for identical subpixel rendering across all operating systems.
-- **The "Hidden DOM" Input Proxy:** Transparently supports multi-language Input Method Editors (IME for Chinese, Japanese, Korean, Vietnamese), complex emojis, native clipboard shortcuts, and screen readers.
-- **3-Tier Layered Canvas:** Decouples static page margins, middle document text runs, and high-frequency caret/selection overlays.
-- **Sub-Millisecond Hit-Testing:** Uses a 2D spatial **R-Tree** (`rbush` / `rstar`) to resolve pointer clicks `(x, y)` to character indices in microseconds ($O(\log N)$).
+Unlike standard web document editors that rely on HTML DOM editing (`contenteditable`)—which causes browser layout thrashing, DOM bloat, and garbage-collection stutters on long documents—Office Engine runs a dedicated **Rust layout and text engine** that paints text and document elements onto a hardware-accelerated WebGL/WebGPU surface.
 
 ---
 
-## Tech Stack
+## ✨ Google Docs-Caliber Feature Suite
 
-| Layer | Technology | Role |
+### 📄 1. Template Gallery & Custom Templates
+- **Curated System Templates:** Instantly start documents with pre-designed templates: *Modern Resume*, *Project Proposal*, *Executive Meeting Notes*, *Formal Letter*, or *Blank A4*.
+- **User Custom Templates:** Save any document to your workspace template gallery.
+- **Instant 1-Click Instantiation:** Creating from a template clones the template's binary snapshot (`loro_binary`) into an independent document in under 500ms.
+
+### 🔒 2. Sharing & Access Control (Public vs. Private Links)
+Full parity with the Google Docs sharing model:
+- **Direct User Invites:** Share with specific users or teams via email with explicit roles:
+  - **Owner:** Full administrative authority, transfer ownership, delete document.
+  - **Editor:** Mutate document text, layout, and formatting.
+  - **Commenter:** View document and place comment anchors; cannot mutate text.
+  - **Viewer:** Read-only access; typing and canvas carets are locked.
+- **General Access (Link Sharing):**
+  - **Restricted:** Only explicitly invited email addresses can open the link.
+  - **Anyone with the link:** Public access with configurable roles (`Viewer`, `Commenter`, `Editor`).
+  - **Link Security:** Optional password protection and automatic expiration timestamps.
+
+### 👥 3. Real-Time Multiplayer Collaboration
+- **Decentralized CRDT:** Powered by **Loro CRDT**, guaranteeing deterministic peer-to-peer merge resolution with zero central transformation bottleneck.
+- **Live Presence Carets:** See other collaborators' colored carets, name tags, and active text selections moving smoothly in real-time.
+- **Dedicated Sync Gateway:** High-throughput WebSocket server running on port `:8080`, supporting horizontal clustering over Redis.
+- **Debounced Snapshots:** Automatically flushes compressed binary checkpoints to SQLite/PostgreSQL and S3/R2 storage every 500ms.
+
+### 👤 4. User Accounts & Workspaces
+- **Self-Hosted Authentication:** Built-in **Better-Auth** with Email/Password, Magic Link, and Google OAuth.
+- **Workspaces:** Organize documents across personal and team workspaces.
+- **Revision History:** Browse past document checkpoints, view author attributions, and restore previous states with one click.
+
+---
+
+## 🏛️ The 4 Non-Negotiable Core Engine Pillars
+
+| Pillar | Engineering Solution | Why It Matters |
 | :--- | :--- | :--- |
-| **Engine Core** | **Rust** (Wasm via `wasm-pack`) | Fast text shaping, layout calculation, and memory-safe multithreading |
-| **Document State** | **`loro`** (Rust CRDT) | B-tree/Rope document buffer supporting rich-text formatting spans |
-| **Graphics Engine** | **`canvaskit-wasm`** (Google Skia) | WebGL / WebGPU 2D rasterization engine |
-| **Text Shaping** | **`cosmic-text`** / **`rustybuzz`** | OpenType font shaping, ligatures, and bidirectional RTL text (HarfBuzz) |
-| **Box Layout** | **`taffy`** (Rust/Wasm) | Flexbox, grid, and block coordinate layout solver |
-| **Spatial Index** | **`rbush`** / **`rstar`** | 2D R-Tree spatial index for mouse selection hit-testing |
-| **Application Shell** | **Nuxt 3** (Vue 3 + TypeScript) | File dashboard, toolbars, menus, dialogs, and Nitro server backend |
-| **Styling** | **Tailwind CSS** | Modern utility-first styling for application chrome |
+| **1. The "Hidden DOM" Proxy** | Floating 1px × 1px `<textarea>` (`HiddenInput.vue`) | Captures keyboard events, clipboard shortcuts, and complex IME compositions (Chinese, Japanese, Korean, Vietnamese, emojis) while maintaining WCAG/ARIA screen reader accessibility. |
+| **2. 3-Tier Layered Canvas** | Decoupled Background, Document Surface, and Overlay layers | Decouples static paper margins and Skia text rendering from high-frequency caret blinking (60/120 FPS), eliminating redundant repaints. |
+| **3. Spatial Hit-Testing** | 2D R-Tree index (`rbush` / `rstar`) | Maps mouse clicks `(x, y)` to logical text characters in microseconds ($O(\log N)$) without scanning the entire document. |
+| **4. Asynchronous Web Worker Layout** | Background layout calculations via `SharedArrayBuffer` | Offloads heavy paragraph wrapping and pagination to a worker thread so live typing never drops a frame. |
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   NUXT 3 FRONTEND                      │
-│       • Application Chrome (Toolbars, Menus, Dialogs)  │
-│       • Hidden Input Proxy (<textarea>): IME & a11y    │
-│       • Page Virtualization: Mounts visible pages only │
-└───────────────────────────┬────────────────────────────┘
-                            │ Pointer Events & Keystrokes
-┌───────────────────────────▼────────────────────────────┐
-│                  RUST ENGINE CORE (Wasm)               │
-│                                                        │
-│  State:           Loro CRDT (Rope buffer with spans)   │
-│  Text Shaping:    cosmic-text (HarfBuzz OpenType)      │
-│  Line Breaking:   Unicode UAX #14 + Knuth-Plass        │
-│  Box Layout:      taffy (Flexbox & Table math)         │
-│  Hit-Testing:     2D R-Tree (O(log N) coordinate map)  │
-└───────────────────────────┬────────────────────────────┘
-                            │ Paint Descriptors
-┌───────────────────────────▼────────────────────────────┐
-│              3-TIER LAYERED CANVAS (Skia)              │
-│                                                        │
-│  Layer 1 (Bottom): Static Paper, Margins, Shadows      │
-│  Layer 2 (Middle): Document Glyphs, Images, Tables     │
-│  Layer 3 (Top):    Caret Blinking, Selection Rects     │
-└────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                   NUXT 3 FULL-STACK APPLICATION                        │
+│       • Full-Stack Nitro: Better-Auth + Drizzle ORM (Postgres/SQLite)  │
+│       • Template Gallery & Document Dashboard                          │
+│       • Google Docs Share Modal (Public/Private Links)                 │
+│       • Hidden Input Proxy (<textarea>): Intercepts IME & a11y         │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Keystrokes & Pointer Events
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                  HIGH-PERFORMANCE CORE (Rust / Wasm)                   │
+│                                                                        │
+│  State & CRDT Model:        Loro (Rust CRDT rope with rich-text spans) │
+│  Text Shaping & Fallback:   cosmic-text / rustybuzz (HarfBuzz)         │
+│  Line-Breaking Engine:      Unicode UAX #14 + Knuth-Plass algorithm    │
+│  2D Box Layout & Flow:      taffy (Flexbox/Grid/Table geometries)      │
+│  Spatial Hit-Testing:       2D R-Tree (rbush / rstar, O(log N) clicks) │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Glyph IDs & Paint Coordinates
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                3-TIER HARDWARE-ACCELERATED CANVAS                      │
+│                                                                        │
+│  Layer 1 (Bottom): Page margins, background, drop-shadows (Cached)     │
+│  Layer 2 (Middle): Document glyphs, images, tables (Skia WebGL)        │
+│  Layer 3 (Top):    Caret blinking, selections, presence (60/120 FPS)   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Tech Stack
+
+| Domain | Technology | Role |
+| :--- | :--- | :--- |
+| **Engine Core** | **Rust** (Wasm via `wasm-pack`) | State management, text layout, shaping, and hit-testing |
+| **State / CRDT** | **`loro`** (Rust) | Rich-text CRDT rope buffer with formatting spans |
+| **Graphics Engine** | **`canvaskit-wasm`** (Google Skia) | Hardware-accelerated WebGL / WebGPU 2D rendering |
+| **Text Shaping** | **`cosmic-text`** / **HarfBuzz** | OpenType font tables, ligatures, and bidirectional text |
+| **Spatial Index** | **`rbush`** / **`rstar`** | 2D R-Tree spatial index for cursor hit-testing |
+| **Frontend Shell** | **Nuxt 3** (Vue 3 + TypeScript) | Application shell, toolbars, dialogs, and Nitro server |
+| **Database & ORM** | **Drizzle ORM** (PostgreSQL / SQLite) | Users, documents, permissions, templates, and revisions |
+| **Authentication** | **Better-Auth** | Self-hosted sessions, OAuth, and workspace management |
+| **Sync Gateway** | **`apps/sync`** (Node.js / ws + Redis) | Real-time WebSocket room multiplexing & awareness |
+| **Styling** | **Tailwind CSS** | Clean, technical, high-density interface styling |
 
 ---
 
@@ -68,30 +109,34 @@
 ### Prerequisites
 - **Node.js** $\ge 20$
 - **pnpm** $\ge 9$
-- **Rust toolchain** (`rustup`, `cargo`, `wasm-pack`) — *required for compiling the Rust Wasm engine*
+- **Rust toolchain** (`rustup`, `cargo`, `wasm-pack`) — *for compiling the Rust Wasm engine*
 
-### Installation
+### Installation & Development
 
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/office-engine.git
 cd office-engine
 
-# Install Node dependencies
+# Install dependencies across all monorepo packages
 pnpm install
 
-# Start the Nuxt 3 development server
-pnpm dev
+# Start both the Nuxt 3 web app and the WebSocket sync server concurrently
+pnpm dev:all
 ```
 
-Visit `http://localhost:3000` to open the document workspace.
+- **Web Application:** `http://localhost:3000`
+- **Sync Gateway:** `ws://localhost:8080`
 
-### Building the Rust WebAssembly Engine
+### Workspace Commands
 
-```bash
-# Build the engine crate into WebAssembly
-pnpm build:wasm
-```
+| Command | Action |
+| :--- | :--- |
+| `pnpm dev` | Starts the Nuxt 3 frontend application (`apps/web`) |
+| `pnpm dev:sync` | Starts the WebSocket collaboration server (`apps/sync`) |
+| `pnpm dev:all` | Runs both frontend and sync servers in parallel |
+| `pnpm build:wasm` | Compiles `crates/engine` into WebAssembly |
+| `pnpm build` | Builds the entire monorepo for production deployment |
 
 ---
 
@@ -99,27 +144,30 @@ pnpm build:wasm
 
 ```
 office-engine/
-├── AGENTS.md                  # Comprehensive AI agent instructions and finish gates
-├── README.md                  # Project overview and architecture documentation
+├── AGENTS.md                  # Comprehensive agent rules, contracts, and finish gates
+├── README.md                  # Project overview, feature breakdown, and quick start
 ├── ROADMAP.md                 # 5-phase engineering roadmap
 ├── pnpm-workspace.yaml        # Monorepo configuration
 ├── Cargo.toml                 # Rust workspace configuration
-├── crates/
-│   └── engine/                # Rust Wasm core (Loro CRDT, shaping, layout)
+│
+├── crates/                    # Rust Core Engine (Wasm)
+│   └── engine/
+│       ├── Cargo.toml         # loro, wasm-bindgen, taffy dependencies
+│       └── src/               # Document, layout, and text shaping modules
+│
 ├── apps/
-│   └── web/                   # Nuxt 3 application shell (toolbars, canvas host)
-└── reference/                 # Battle-tested open-source reference implementations
+│   ├── web/                   # Nuxt 3 Full-Stack Application
+│   │   ├── components/        # CanvasSurface, HiddenInput, Toolbar, ShareModal
+│   │   ├── pages/             # Dashboard, Template Gallery, and Canvas Editor
+│   │   └── server/database/   # Drizzle ORM schema (Users, Docs, Shares, Templates)
+│   │
+│   └── sync/                  # Dedicated WebSocket Collaboration Server
+│       └── src/index.ts       # Room multiplexing, presence, and permission gating
+│
+└── reference/                 # Open-Source References for Agent Lookup
     ├── canvas-editor/         # TypeScript canvas document editor reference (Hufe921)
-    └── cosmic-text/           # Rust text shaping & font layout reference
+    └── cosmic-text/           # Rust text shaping & font engine reference
 ```
-
----
-
-## Reference Implementations
-
-The repository includes curated reference codebases in `reference/` for inspecting battle-tested algorithms:
-- **`reference/canvas-editor`**: Studied for IME textarea synchronization, cursor positioning, and selection range mapping.
-- **`reference/cosmic-text`**: Studied for pure-Rust OpenType font shaping, fallback, and bidirectional text flow.
 
 ---
 

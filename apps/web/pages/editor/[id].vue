@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col bg-slate-100 overflow-hidden">
-    <!-- Top Application Bar & Controls -->
-    <EditorToolbar :title="documentTitle" />
+    <!-- Top Application Bar & Controls with Google Docs Share System -->
+    <EditorToolbar :title="documentTitle" :doc-id="docId" />
 
     <!-- Document Scroll Viewport -->
     <div class="flex-1 overflow-auto flex justify-center py-8 px-4 relative">

@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "pnpm --filter @office-engine/web dev",
-    "build": "pnpm build:wasm && pnpm --filter @office-engine/web build",
+    "dev:sync": "pnpm --filter @office-engine/sync dev",
+    "dev:all": "pnpm --parallel dev",
+    "build": "pnpm build:wasm && pnpm --filter @office-engine/web build && pnpm --filter @office-engine/sync build",
     "build:wasm": "cargo build --target wasm32-unknown-unknown --release || echo 'Build wasm via wasm-pack when rust is installed'",
     "lint": "pnpm --filter @office-engine/web lint",
     "test": "pnpm --filter @office-engine/web test"

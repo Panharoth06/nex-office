@@ -7,20 +7,29 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@tanstack/virtual-core": "^3.13.0",
+    "better-auth": "^1.1.18",
+    "better-sqlite3": "^11.8.1",
     "canvaskit-wasm": "^0.39.1",
+    "drizzle-orm": "^0.39.3",
+    "loro-crdt": "^1.4.0",
     "lucide-vue-next": "^0.475.0",
+    "postgres": "^3.4.5",
     "rbush": "^4.0.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.13.1",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.4",
     "@types/rbush": "^3.0.3",
+    "drizzle-kit": "^0.30.4",
     "nuxt": "^3.15.4",
     "typescript": "^5.7.3"
   }
