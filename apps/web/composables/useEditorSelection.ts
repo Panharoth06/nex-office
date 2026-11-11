@@ -61,6 +61,10 @@ export function useEditorSelection(options: EditorSelectionOptions) {
   }
 
   function toggleMark(key: FormatKey) {
+    // Toolbar clicks move focus to the button; return it to the hidden input so
+    // the user can keep typing immediately after formatting.
+    options.focus()
+
     const engine = options.engine()
     if (!engine || !hasSelection.value) return
 

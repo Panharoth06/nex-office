@@ -36,6 +36,7 @@
         variant="ghost"
         size="icon"
         aria-label="Bold"
+        @mousedown.prevent
         :aria-pressed="formatState.bold"
         @click="emit('format', 'bold')"
       >
@@ -45,6 +46,7 @@
         variant="ghost"
         size="icon"
         aria-label="Italic"
+        @mousedown.prevent
         :aria-pressed="formatState.italic"
         @click="emit('format', 'italic')"
       >
@@ -54,6 +56,7 @@
         variant="ghost"
         size="icon"
         aria-label="Underline"
+        @mousedown.prevent
         :aria-pressed="formatState.underline"
         @click="emit('format', 'underline')"
       >
