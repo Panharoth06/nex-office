@@ -1,100 +1,91 @@
 <template>
-  <section class="py-6 border-b border-slate-200">
-    <div class="flex items-center justify-between mb-4">
+  <section class="border-b border-slate-200 py-6">
+    <div class="mb-4 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-slate-800">Start a new document</h2>
-      <button class="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Template gallery ↕</button>
+      <UiButton variant="ghost" size="sm" @click="galleryOpen = !galleryOpen">
+        <LayoutGrid class="h-3.5 w-3.5" aria-hidden="true" />
+        Template gallery
+        <ChevronDown
+          class="h-3 w-3 transition-transform"
+          :class="{ 'rotate-180': galleryOpen }"
+          aria-hidden="true"
+        />
+      </UiButton>
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-      <!-- Blank Template -->
-      <button
-        @click="createFromTemplate('blank')"
-        class="group text-left"
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+      <UiButton
+        v-for="template in templates"
+        :key="template.id"
+        variant="unstyled"
+        class="group block"
+        @click="createFromTemplate(template)"
       >
-        <div class="aspect-3/4 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-2xs group-hover:border-indigo-500 transition">
-          <span class="text-3xl text-indigo-600 font-light">+</span>
-        </div>
-        <p class="text-xs font-medium text-slate-800 mt-2">Blank document</p>
-      </button>
-
-      <!-- Resume Template -->
-      <button
-        @click="createFromTemplate('resume')"
-        class="group text-left"
-      >
-        <div class="aspect-3/4 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs group-hover:border-indigo-500 transition flex flex-col justify-between">
-          <div class="space-y-1.5">
-            <div class="h-2 w-16 bg-slate-800 rounded"></div>
-            <div class="h-1 w-20 bg-slate-300 rounded"></div>
-            <div class="h-px bg-slate-200 my-2"></div>
-            <div class="h-1 w-24 bg-slate-200 rounded"></div>
-            <div class="h-1 w-16 bg-slate-200 rounded"></div>
+        <div
+          class="flex aspect-[3/4] items-center justify-center rounded-lg border border-slate-200 bg-white shadow-sm transition group-hover:border-indigo-500 group-hover:shadow-md"
+        >
+          <span v-if="template.id === 'blank'" class="text-3xl font-light text-indigo-600">+</span>
+          <div v-else class="flex h-full w-full flex-col justify-between p-3">
+            <div class="space-y-1.5">
+              <div
+                class="h-2 rounded"
+                :class="template.accent ? 'bg-indigo-600' : 'bg-slate-800'"
+                :style="{ width: template.titleWidth }"
+              />
+              <div class="h-1 w-20 rounded bg-slate-300" />
+              <div class="my-2 h-px bg-slate-200" />
+              <div class="h-1 w-24 rounded bg-slate-200" />
+              <div class="h-1 w-16 rounded bg-slate-200" />
+              <div class="h-1 w-[4.5rem] rounded bg-slate-200" />
+            </div>
+            <div
+              class="h-1 rounded"
+              :class="template.accent ? 'bg-indigo-300' : 'bg-slate-400'"
+              :style="{ width: template.footerWidth }"
+            />
           </div>
-          <div class="h-1 w-12 bg-indigo-300 rounded"></div>
         </div>
-        <p class="text-xs font-medium text-slate-800 mt-2">Modern Resume</p>
-      </button>
-
-      <!-- Project Proposal -->
-      <button
-        @click="createFromTemplate('proposal')"
-        class="group text-left"
-      >
-        <div class="aspect-3/4 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs group-hover:border-indigo-500 transition flex flex-col justify-between">
-          <div class="space-y-1.5">
-            <div class="h-2 w-20 bg-indigo-600 rounded"></div>
-            <div class="h-1 w-24 bg-slate-300 rounded"></div>
-            <div class="h-1.5 w-full bg-slate-100 rounded mt-3"></div>
-            <div class="h-1.5 w-full bg-slate-100 rounded"></div>
-          </div>
-          <div class="h-1 w-16 bg-slate-400 rounded"></div>
-        </div>
-        <p class="text-xs font-medium text-slate-800 mt-2">Project Proposal</p>
-      </button>
-
-      <!-- Meeting Notes -->
-      <button
-        @click="createFromTemplate('notes')"
-        class="group text-left"
-      >
-        <div class="aspect-3/4 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs group-hover:border-indigo-500 transition flex flex-col justify-between">
-          <div class="space-y-1.5">
-            <div class="h-2 w-14 bg-emerald-600 rounded"></div>
-            <div class="h-1 w-18 bg-slate-300 rounded"></div>
-            <div class="h-1 w-full bg-slate-200 rounded mt-2"></div>
-            <div class="h-1 w-full bg-slate-200 rounded"></div>
-            <div class="h-1 w-12 bg-slate-200 rounded"></div>
-          </div>
-          <div class="h-1 w-14 bg-slate-300 rounded"></div>
-        </div>
-        <p class="text-xs font-medium text-slate-800 mt-2">Meeting Notes</p>
-      </button>
-
-      <!-- Formal Letter -->
-      <button
-        @click="createFromTemplate('letter')"
-        class="group text-left"
-      >
-        <div class="aspect-3/4 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs group-hover:border-indigo-500 transition flex flex-col justify-between">
-          <div class="space-y-1.5">
-            <div class="h-1.5 w-8 bg-slate-400 rounded"></div>
-            <div class="h-1 w-16 bg-slate-300 rounded"></div>
-            <div class="h-1 w-24 bg-slate-200 rounded mt-3"></div>
-            <div class="h-1 w-20 bg-slate-200 rounded"></div>
-          </div>
-          <div class="h-1.5 w-10 bg-slate-800 rounded"></div>
-        </div>
-        <p class="text-xs font-medium text-slate-800 mt-2">Formal Letter</p>
-      </button>
+        <p class="mt-2 text-xs font-medium text-slate-800">{{ template.label }}</p>
+      </UiButton>
     </div>
+
+    <p v-if="galleryOpen" class="mt-3 text-[10px] text-slate-400">
+      More templates will load from the template API once M2 lands.
+    </p>
   </section>
 </template>
 
 <script setup lang="ts">
-const router = useRouter()
+import { ref } from 'vue'
+import { ChevronDown, LayoutGrid } from 'lucide-vue-next'
+import UiButton from '~/components/shared/UiButton.vue'
 
-function createFromTemplate(templateType: string) {
-  const newDocId = `doc-${Date.now()}`
-  router.push(`/editor/${newDocId}?template=${templateType}`)
+interface TemplateCard {
+  id: string
+  label: string
+  accent: boolean
+  titleWidth: string
+  footerWidth: string
+}
+
+const emit = defineEmits<{
+  (e: 'create', template: { id: string; title: string }): void
+}>()
+
+const galleryOpen = ref(false)
+
+const templates: ReadonlyArray<TemplateCard> = [
+  { id: 'blank', label: 'Blank document', accent: false, titleWidth: '4rem', footerWidth: '3rem' },
+  { id: 'resume', label: 'Modern Resume', accent: true, titleWidth: '4rem', footerWidth: '3rem' },
+  { id: 'proposal', label: 'Project Proposal', accent: true, titleWidth: '5rem', footerWidth: '4rem' },
+  { id: 'notes', label: 'Meeting Notes', accent: false, titleWidth: '3.5rem', footerWidth: '3.5rem' },
+  { id: 'letter', label: 'Formal Letter', accent: false, titleWidth: '2rem', footerWidth: '2.5rem' },
+]
+
+function createFromTemplate(template: TemplateCard) {
+  emit('create', {
+    id: template.id,
+    title: template.id === 'blank' ? 'Untitled Document' : template.label,
+  })
 }
 </script>

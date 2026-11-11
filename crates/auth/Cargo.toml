@@ -1,0 +1,19 @@
+[package]
+name = "office-engine-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+office-engine-domain = { path = "../domain" }
+openidconnect.workspace = true
+jsonwebtoken.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+redis.workspace = true
+tower-sessions.workspace = true
+time.workspace = true
+async-trait.workspace = true

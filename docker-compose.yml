@@ -1,0 +1,161 @@
+name: office-engine
+
+x-rust-common: &rust-common
+  image: office-engine-rust:dev
+  build:
+    context: .
+    dockerfile: Dockerfile.rust
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: office
+      POSTGRES_PASSWORD: office
+      POSTGRES_DB: office_engine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U office -d office_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    <<: *rust-common
+    command: ["office-engine-api"]
+    environment:
+      DATABASE_URL: postgresql://office:office@db:5432/office_engine
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      REDIS_URL: redis://redis:6379
+      API_BIND: 0.0.0.0:8080
+      WEB_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      SESSION_SECURE_COOKIES: ${SESSION_SECURE_COOKIES:-false}
+      SYNC_JWT_SECRET: ${SYNC_JWT_SECRET:-dev-only-change-me}
+      DEV_AUTH: ${DEV_AUTH:-false}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_PROVIDER_ID: ${OIDC_PROVIDER_ID:-oidc}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-http://localhost:8080/api/auth/oidc/callback}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid,email,profile}
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  sync:
+    <<: *rust-common
+    command: ["office-engine-sync"]
+    environment:
+      SYNC_BIND: 0.0.0.0:8081
+      SYNC_JWT_SECRET: ${SYNC_JWT_SECRET:-dev-only-change-me}
+      RUST_LOG: ${RUST_LOG:-info}
+    expose:
+      - "8081"
+
+  worker:
+    <<: *rust-common
+    command: ["office-engine-worker"]
+    environment:
+      DATABASE_URL: postgresql://office:office@db:5432/office_engine
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${RUST_LOG:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-}
+      NUXT_PUBLIC_SYNC_URL: ${NUXT_PUBLIC_SYNC_URL:-ws://localhost:8080/ws}
+      NUXT_PUBLIC_DEV_AUTH: ${DEV_AUTH:-false}
+    depends_on:
+      - api
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - api
+      - sync
+      - web
+    restart: unless-stopped
+
+  test:
+    profiles: ["test"]
+    image: office-engine-rust-test:dev
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+      target: builder
+    working_dir: /app
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "/usr/local/cargo/bin/cargo fmt --all -- --check &&
+       /usr/local/cargo/bin/cargo clippy --workspace --all-targets --all-features --locked -- -D warnings &&
+       /usr/local/cargo/bin/cargo test --workspace"
+    environment:
+      CARGO_TERM_COLOR: never
+    volumes:
+      - cargo-registry:/usr/local/cargo/registry
+
+  web-test:
+    profiles: ["test"]
+    image: office-engine-web-test:dev
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder
+    working_dir: /app
+    command: ["pnpm", "--filter", "@office-engine/web", "test"]
+
+  wasm:
+    profiles: ["wasm"]
+    image: office-engine-wasm:dev
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: wasm
+    working_dir: /wasm
+    command: ["sh", "-c", "mkdir -p /out && cp -r /wasm/. /out/"]
+    volumes:
+      - ./apps/web/public/wasm:/out
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
+  cargo-registry:

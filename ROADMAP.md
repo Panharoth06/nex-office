@@ -1,110 +1,157 @@
 # ROADMAP.md — Office Engine
 
-> The authoritative engineering roadmap for building a Google Docs-caliber collaborative canvas document engine with templates, granular sharing, and real-time co-authoring.
+> Engineering milestones for the multi-product office suite: Docs, Sheets, Slides, and Draw on one Rust engine, one PostgreSQL schema, and one real-time sync layer.
 
 ---
 
-## Roadmap Overview
+## Milestone Overview
 
 ```
-Phase 1: Canvas Core & MVP (W1–3)    ──► Phase 2: Auth & Templates (W4–5)  ──► Phase 3: Sharing & Permissions (W6–7)
-  • Rust Wasm Engine Core                  • Better-Auth Self-Hosted Stack        • Direct User Invites (Roles)
-  • 3-Tier Layered Canvas (Skia)           • Drizzle ORM Database Schema          • Public vs Restricted Share Links
-  • Hidden IME Proxy Input                 • Template Gallery & 1-Click Clone     • Password & Expiration Controls
-  • A4 Pagination & Wrapping               • Workspace Dashboard UI
+M0  Foundation        ──► M1  Auth & OIDC      ──► M2  Documents & Sharing
+    Rust workspace             OIDC, sessions         CRUD, permissions, links
+    PostgreSQL + Redis         sync-token minting     templates, comments
+    health checks              role enforcement       audit log
 
-Phase 4: Real-Time Sync (W8–9)       ──► Phase 5: Rich Blocks & Tables (W10–11) ──► Phase 6: Enterprise Interop (W12)
-  • Dedicated Sync Server (:8080)          • Multi-page Tables (taffy)                • Native .docx Import/Export
-  • Multi-user Presence Carets             • Inline & Floating Images                 • Client-side Vector PDF (typst.ts)
-  • Loro CRDT Binary Streaming             • Headers, Footers & Margins               • WCAG 2.1 AA Screen Reader Tests
-  • Debounced S3/DB Snapshots              • Drag-Selection Physics
+M2.5 Typing Slice     ──► M3  Real-Time Sync    ──► M4  Product Engines
+    Wasm engine in web         Rust WS gateway          Docs, Sheets, Slides
+    HiddenInput → engine       Redis pub/sub            Draw surfaces
+    caret, click, IME          presence, snapshots      formula + scene graph
 ```
 
 ---
 
-## Phase 1: MVP Canvas Engine & Multi-Page Layout (Weeks 1–3)
+## M0 — Foundation (current)
 
-**Objective:** Build the foundational canvas rendering pipeline capable of typing, formatting, and rendering multi-page A4 documents with zero latency.
+**Objective:** One Rust workspace, one PostgreSQL schema, and runnable service skeletons.
 
-- [x] **Monorepo Scaffold:** Setup pnpm workspace with Nuxt 3 (`apps/web`), sync service (`apps/sync`), and Rust core (`crates/engine`).
-- [x] **Cloned References:** Curate `reference/canvas-editor` and `reference/cosmic-text` for algorithm lookups.
-- [ ] **Loro CRDT Integration:** Initialize `LoroDoc` in Rust with rich-text inline attributes (`bold`, `italic`, `underline`, `fontSize`, `color`).
-- [ ] **Google Skia Rendering:** Mount `canvaskit-wasm` on Layer 2 canvas, executing hardware-accelerated text draw calls on WebGL.
-- [ ] **3-Tier Canvas Layout:** Decouple Paper background (Layer 1), Document text (Layer 2), and Dynamic overlay (Layer 3).
-- [ ] **The "Hidden DOM" Proxy:** Wire up `HiddenInput.vue` to track caret position and handle English typing, CJK/Vietnamese IME composition, and backspace.
-- [ ] **A4 Pagination Solver:** Wrap lines at the right margin ($96\text{ px}$) and split paragraphs across A4 pages ($794 \times 1123\text{ px}$).
+- [x] Rust workspace: `domain`, `storage`, `auth`, `api`, `sync`, `worker`, `engine`.
+- [x] PostgreSQL schema and migrations (documents, permissions, share links, templates, snapshots, comments, suggestions, SSO).
+- [x] Postgres-only policy; SQLite removed from the stack.
+- [x] API binary with `/healthz`, `/readyz`, structured logs, graceful shutdown.
+- [x] Sync binary with JWT-gated WebSocket upgrade and read-only mutation rejection.
+- [x] Docker Compose for PostgreSQL 16 and Redis 7.
+- [x] CI: `cargo fmt`, `cargo clippy`, `cargo test`, TypeScript typechecks.
+- [ ] Drizzle schema mirror generated and verified against the SQL schema.
 
-**Acceptance Gate:** User can open a document, click anywhere, type smoothly via IME, format bold/italic text, and see text cleanly wrap across multiple A4 pages at 60 FPS.
-
----
-
-## Phase 2: Users, Authentication & Template Gallery (Weeks 4–5)
-
-**Objective:** Add complete user identity and a Google Docs-style template gallery.
-
-- [x] **Database Schema Scaffold:** Drizzle ORM schema for `users`, `sessions`, `documents`, `document_templates`.
-- [x] **Template Gallery UI:** Dashboard component displaying *Blank Document*, *Modern Resume*, *Project Proposal*, *Meeting Notes*, and *Formal Letter*.
-- [ ] **Better-Auth Integration:** Setup email/password, magic link, and Google OAuth in Nuxt Nitro routes.
-- [ ] **1-Click Template Cloning:** Implement backend endpoint `/api/templates/:id/clone` that copies a template's binary snapshot into a new document owned by the current user in $< 500\text{ ms}$.
-- [ ] **User Custom Templates:** Allow users to flag any existing document as a reusable template in their workspace.
-
-**Acceptance Gate:** Users can sign up, log in, view their personal workspace dashboard, and create new documents from pre-built templates.
+**Gate:** `docker compose up -d`, `cargo run -p office-engine-api` serves health checks, and `cargo run -p office-engine-sync` rejects unauthenticated WebSocket upgrades.
 
 ---
 
-## Phase 3: Google Docs Sharing & Permissions Engine (Weeks 6–7)
+## M1 — Authentication & OIDC
 
-**Objective:** Replicate the exact two-tier Google Docs sharing and access control system.
+**Objective:** Production-grade identity without trusting the client.
 
-- [x] **Share Modal UI:** Implemented `ShareModal.vue` with direct user invites and general access controls.
-- [x] **Permissions Schema:** Tables for `document_permissions` (direct user roles) and `document_share_links` (link tokens).
-- [ ] **Direct Access Enforcement:** Manage invites with explicit roles: `owner`, `editor`, `commenter`, `viewer`.
-- [ ] **General Access Links:**
-  - **Restricted:** Link requires an account matching the invited list.
-  - **Anyone with the link:** Public access with configurable roles (`public_view`, `public_comment`, `public_edit`).
-- [ ] **Link Security:** Support optional link passwords and automatic expiration dates.
-- [ ] **Read-Only Viewer Mode:** When opened as `viewer`, the canvas disables cursor blinking, disables the hidden proxy input, and hides editing toolbars.
+- [x] OIDC authorization code flow with PKCE, `state`, and `nonce`.
+- [x] Discovery document loaded at startup and JWKS-backed ID-token verification.
+- [x] ID-token validation: signature, `iss`, `aud`, `exp`, `nonce`.
+- [x] Account linking by verified email only.
+- [x] Redis-backed sessions (`tower-sessions`) with secure cookies.
+- [ ] Email/password with Argon2id, magic links, password reset.
+- [ ] Per-workspace SSO provider registration and email-domain routing.
+- [x] `POST /api/sync/token` mints short-lived, document-scoped JWTs.
+- [ ] Audit events for sign-in, SSO changes, and session revocation.
 
-**Acceptance Gate:** An owner can generate a public view-only link, open it in an Incognito browser window, verify that text is visible but non-editable, and see live edits made by the owner appear instantly.
-
----
-
-## Phase 4: Real-Time Multiplayer Collaboration & Presence (Weeks 8–9)
-
-**Objective:** Enable smooth, real-time co-authoring with multi-user presence indicators.
-
-- [x] **Sync Service Scaffold:** Setup dedicated WebSocket server in `apps/sync/src/index.ts` on port `:8080`.
-- [ ] **Loro CRDT Binary Streaming:** Stream compact binary mutation deltas between connected peers via WebSockets.
-- [ ] **Role Verification at Gateway:** Sync server verifies session or share link token on connection; blocks mutation packets from `viewer` connections.
-- [ ] **Multi-User Presence Overlays:** Broadcast remote cursor coordinates `(x, y)` and active text selection ranges; render colored caret flags on Layer 3 at 60 FPS.
-- [ ] **Debounced Snapshot Flushes:** Sync server periodically writes compressed snapshots to SQLite/PostgreSQL (`document_snapshots`) and S3/R2 storage every 500ms.
-
-**Acceptance Gate:** Two independent browser sessions on the same document see each other's live cursor positions and can edit simultaneously with zero merge conflicts.
+**Gate:** a Keycloak/Okta provider signs in via discovery, a session cookie is issued, and the minted sync token is accepted by the Rust gateway while a forged token is rejected.
 
 ---
 
-## Phase 5: Rich Content Blocks, Tables & Hit-Testing (Weeks 10–11)
+## M2 — Documents, Permissions & Sharing
 
-**Objective:** Expand canvas capabilities to tables, images, and fluid drag-selection physics.
+**Objective:** Google Docs-style document lifecycle and two-tier access control.
 
-- [ ] **2D R-Tree Hit-Testing (`rbush` / `rstar`):** Map pointer clicks `(x, y)` to logical text characters in microseconds ($O(\log N)$).
-- [ ] **Drag Selection Physics:** Draw multi-line selection highlight rectangles on Layer 3 during mouse drag.
-- [ ] **Table Box Solver (`taffy`):** Implement table rows, columns, borders, and cell padding calculations.
-- [ ] **Table Multi-Page Splitting:** Split large tables across page boundaries without truncating cell contents.
-- [ ] **Inline Images & Floats:** Render inline images with bounding-box text wrapping.
+- [x] Document CRUD scoped by `kind` (`doc`, `sheet`, `slides`, `draw`): create, list, read, rename, archive, snapshot load/save.
+- [ ] Direct permissions: `owner`, `editor`, `commenter`, `viewer`.
+- [ ] Share links: `restricted`, `public_view`, `public_comment`, `public_edit`.
+- [ ] Optional link password and expiry; constant-time verification.
+- [ ] Template gallery and 1-click clone in under 500ms.
+- [ ] Comments, mentions, replies, resolve.
+- [ ] Revision history reads and named versions.
+- [ ] Activity log for security-relevant actions.
 
-**Acceptance Gate:** Users can drag-select text across paragraphs and pages, insert multi-page tables, and insert inline images with exact layout stability.
+**Gate:** an owner creates a public viewer link; an unauthenticated incognito session opens it read-only and every mutation is rejected.
 
 ---
 
-## Phase 6: Document Revision History & Enterprise Interop (Week 12)
+## M2.5 — Typing Vertical Slice
 
-**Objective:** Version control, file import/export, and enterprise compliance.
+**Objective:** prove the input → engine → canvas path before persistence and sync land.
 
-- [ ] **Revision History UI:** Sidebar showing all historical commits, timestamps, and author avatars.
-- [ ] **1-Click Version Restore:** Revert document state to any previous snapshot.
-- [ ] **Native `.docx` Import / Export:** High-fidelity conversion between Loro document AST and Microsoft Word `.docx`.
-- [ ] **Client-Side Vector PDF:** Generate vector PDFs directly in background Web Workers using `typst.ts` or `pdf-lib`.
-- [ ] **Accessibility (WCAG 2.1 AA):** Verify screen reader navigation (VoiceOver, NVDA) across document headings and paragraphs via the synchronized hidden DOM tree.
+- [x] Build `crates/engine` to Wasm and load it from `apps/web`.
+- [x] Bridge `HiddenInput` → `EngineCore::insert_text` / `delete_range`.
+- [x] Canvas line layout measured in Unicode code points.
+- [x] Caret rendering, arrows, Home/End, and click-to-place.
+- [x] IME composition preview and commit.
+- [x] Docker web image builds the Wasm engine; `make wasm` for local dev.
+- [x] Playwright smoke test: English, CJK, Vietnamese, backspace, click, composition.
+- [ ] Persistence and document loading (arrives with M2/M3).
 
-**Acceptance Gate:** Flawless round-trip import/export of `.docx` files, vector PDF generation, and complete revision history rollback.
+**Gate:** typing at `/editor/demo` updates the canvas, the caret follows the input, and clicking places the caret. Text is in memory only.
+
+---
+
+## M3 — Real-Time Sync & Presence
+
+**Objective:** Multi-user co-authoring that survives pod restarts.
+
+- [ ] Loro binary relay over the Rust WebSocket gateway.
+- [ ] Redis pub/sub room fan-out; no sticky-session requirement.
+- [ ] Presence with TTL: carets, selections, names, colors.
+- [ ] Per-document advisory lock for snapshot writes.
+- [ ] Debounced snapshot flush (500ms–2s) with monotonic versions.
+- [ ] Reconnect with version-vector diff, not full snapshots.
+- [ ] Backpressure: message size, rate, room size, buffer limits.
+- [ ] Multi-replica load test with simulated clients.
+
+**Gate:** two browser sessions on different sync pods see each other's carets and edits with no lost updates; killing one pod drops zero persisted changes.
+
+---
+
+## M4 — Product Engines
+
+**Objective:** Ship the four rendering surfaces on the shared engine.
+
+### Docs
+
+- [ ] Flow layout, A4 pagination, headers/footers, sections.
+- [ ] Rich text, styles, lists, tables, images, footnotes.
+- [ ] Hidden input proxy with CJK/Vietnamese IME.
+- [ ] 3-tier canvas and R-tree hit-testing.
+
+### Sheets
+
+- [ ] Sparse grid and virtualized rendering for 10M+ cells.
+- [ ] Formula parser, dependency graph, incremental recalculation.
+- [ ] Number formats, conditional formatting, validation, filters.
+- [ ] Pivot tables and chart editor.
+
+### Slides
+
+- [ ] Scene graph, masters/layouts, themes.
+- [ ] Text, shapes, connectors, images, tables, charts.
+- [ ] Animations, transitions, presenter view.
+- [ ] Slide sorter and thumbnails.
+
+### Draw
+
+- [ ] Infinite canvas, pen/highlighter, shape recognition.
+- [ ] Connectors, sticky notes, layers.
+- [ ] PNG/SVG/PDF export.
+
+**Gate:** each product meets its contract in `AGENTS.md` with no regressions in shared auth, sharing, or sync.
+
+---
+
+## M5 — Interoperability, Enterprise & Scale
+
+**Objective:** File fidelity and operational maturity.
+
+- [ ] `.docx`, `.xlsx`, `.pptx` import/export with round-trip fixtures.
+- [ ] Vector PDF export in the worker.
+- [ ] PDF viewer with search and annotations.
+- [ ] PgBouncer tuning, read replicas, snapshot partitioning.
+- [ ] OpenTelemetry traces and Prometheus dashboards.
+- [ ] Per-workspace SSO enforcement, group-to-role mapping, session revocation.
+- [ ] WCAG 2.1 AA audit across all products.
+- [ ] Offline editing with IndexedDB/OPFS and conflict-free merge.
+
+**Gate:** round-trip a `.docx`, `.xlsx`, and `.pptx` without structural loss; export a 100-page document and a 50-slide deck without blocking API latency.

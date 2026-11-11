@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+/// A shaped glyph positioned within a line.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlyphRun {
     pub glyph_id: u32,

@@ -9,8 +9,11 @@ dist-ssr/
 # Rust & WebAssembly artifacts
 target/
 pkg/
-Cargo.lock
 **/*.rs.bk
+apps/web/public/wasm/
+
+# sqlx offline metadata is committed on purpose (cargo sqlx prepare)
+# Cargo.lock is committed because these are deployable binaries.
 
 # Logs and runtime databases
 *.log

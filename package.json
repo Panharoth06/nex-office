@@ -2,14 +2,25 @@
   "name": "office-engine-monorepo",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@12.11.2",
   "scripts": {
     "dev": "pnpm --filter @office-engine/web dev",
-    "dev:sync": "pnpm --filter @office-engine/sync dev",
+    "dev:api": "cargo run -p office-engine-api",
+    "dev:sync": "cargo run -p office-engine-sync",
+    "dev:sync:node": "pnpm --filter @office-engine/sync dev",
     "dev:all": "pnpm --parallel dev",
-    "build": "pnpm build:wasm && pnpm --filter @office-engine/web build && pnpm --filter @office-engine/sync build",
-    "build:wasm": "cargo build --target wasm32-unknown-unknown --release || echo 'Build wasm via wasm-pack when rust is installed'",
+    "build": "pnpm build:wasm && pnpm build:web && cargo build --release -p office-engine-api -p office-engine-sync -p office-engine-worker",
+    "build:web": "pnpm --filter @office-engine/web build",
+    "build:wasm": "wasm-pack build crates/engine --target web --out-dir ../../apps/web/public/wasm",
+    "build:api": "cargo build --release -p office-engine-api",
+    "build:sync": "cargo build --release -p office-engine-sync",
+    "build:worker": "cargo build --release -p office-engine-worker",
+    "db:generate": "pnpm --filter @office-engine/web db:generate",
+    "db:migrate": "pnpm --filter @office-engine/web db:migrate",
+    "db:studio": "pnpm --filter @office-engine/web db:studio",
     "lint": "pnpm --filter @office-engine/web lint",
-    "test": "pnpm --filter @office-engine/web test"
+    "lint:ui": "pnpm --filter @office-engine/web lint:ui",
+    "test": "cargo test --workspace && pnpm --filter @office-engine/web test"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
