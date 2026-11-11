@@ -89,6 +89,7 @@ const props = withDefaults(
     menuAlign?: MenuAlign
     disabled?: boolean
     ariaLabel?: string
+    returnFocus?: boolean
   }>(),
   {
     placeholder: 'Select…',
@@ -96,6 +97,7 @@ const props = withDefaults(
     menuAlign: 'start',
     disabled: false,
     ariaLabel: '',
+    returnFocus: true,
   },
 )
 
@@ -154,7 +156,7 @@ function toggle() {
 function select(option: SelectOption<T>) {
   if (option.disabled) return
   model.value = option.value
-  close(true)
+  close(props.returnFocus)
 }
 
 function moveActive(delta: number) {

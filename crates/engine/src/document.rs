@@ -2,6 +2,24 @@ use loro::{
     ExpandType, ExportMode, LoroDoc, LoroEncodeError, LoroResult, StyleConfig, StyleConfigMap,
 };
 
+/// Text-mark configuration shared by every document.
+///
+/// Loro requires every mark key to have an expansion policy. Block-level marks
+/// expand forward so text typed at the start of a paragraph inherits the
+/// paragraph attributes stored on the preceding newline.
+fn block_style_config() -> StyleConfigMap {
+    let mut styles = StyleConfigMap::default_rich_text_config();
+    for key in ["paragraph", "list", "list_level", "align"] {
+        styles.insert(
+            key.into(),
+            StyleConfig {
+                expand: ExpandType::After,
+            },
+        );
+    }
+    styles
+}
+
 /// Thin wrapper around a Loro document that owns the `document_text` container.
 pub struct DocumentModel {
     loro: LoroDoc,
@@ -16,14 +34,7 @@ impl DocumentModel {
     /// Create an empty Loro document.
     pub fn new() -> Self {
         let loro = LoroDoc::new();
-        let mut styles = StyleConfigMap::default_rich_text_config();
-        styles.insert(
-            "paragraph".into(),
-            StyleConfig {
-                expand: ExpandType::After,
-            },
-        );
-        loro.config_text_style(styles);
+        loro.config_text_style(block_style_config());
 
         Self { loro }
     }
@@ -229,5 +240,73 @@ mod tests {
             serde_json::from_str(&restored.delta_json().expect("delta should serialize"))
                 .expect("delta should be valid JSON");
         assert_eq!(delta[0]["attributes"]["italic"], true);
+    }
+
+    #[test]
+    fn block_marks_are_reflected_in_the_delta() {
+        let mut doc = DocumentModel::new();
+        doc.insert(0, "One").expect("insert should succeed");
+        doc.insert(3, "\n").expect("insert should succeed");
+        doc.set_mark_value(0, 3, "list", "ol")
+            .expect("list mark should succeed");
+        doc.set_mark_value(0, 3, "list_level", "1")
+            .expect("list level mark should succeed");
+        doc.set_mark_value(3, 4, "list", "ol")
+            .expect("leading newline mark should succeed");
+        doc.set_mark_value(0, 3, "align", "center")
+            .expect("align mark should succeed");
+
+        let delta: serde_json::Value =
+            serde_json::from_str(&doc.delta_json().expect("delta should serialize"))
+                .expect("delta should be valid JSON");
+
+        assert_eq!(delta[0]["insert"], "One");
+        assert_eq!(delta[0]["attributes"]["list"], "ol");
+        assert_eq!(delta[0]["attributes"]["list_level"], "1");
+        assert_eq!(delta[0]["attributes"]["align"], "center");
+        assert_eq!(delta[1]["insert"], "\n");
+        assert_eq!(delta[1]["attributes"]["list"], "ol");
+    }
+
+    #[test]
+    fn unmark_removes_block_mark() {
+        let mut doc = DocumentModel::new();
+        doc.insert(0, "One").expect("insert should succeed");
+        doc.set_mark_value(0, 3, "list", "ul")
+            .expect("mark should succeed");
+        doc.set_mark(0, 3, "list", false)
+            .expect("unmark should succeed");
+
+        let delta: serde_json::Value =
+            serde_json::from_str(&doc.delta_json().expect("delta should serialize"))
+                .expect("delta should be valid JSON");
+
+        assert!(delta[0]["attributes"].get("list").is_none());
+    }
+
+    #[test]
+    fn snapshot_round_trip_preserves_block_marks() {
+        let mut doc = DocumentModel::new();
+        doc.insert(0, "One\n").expect("insert should succeed");
+        doc.set_mark_value(0, 3, "list", "ol")
+            .expect("mark should succeed");
+        doc.set_mark_value(0, 3, "list_level", "2")
+            .expect("mark should succeed");
+        doc.set_mark_value(3, 4, "align", "right")
+            .expect("mark should succeed");
+
+        let snapshot = doc.export_snapshot().expect("snapshot should export");
+        let mut restored = DocumentModel::new();
+        restored
+            .import_snapshot(&snapshot)
+            .expect("snapshot should import");
+
+        let delta: serde_json::Value =
+            serde_json::from_str(&restored.delta_json().expect("delta should serialize"))
+                .expect("delta should be valid JSON");
+
+        assert_eq!(delta[0]["attributes"]["list"], "ol");
+        assert_eq!(delta[0]["attributes"]["list_level"], "2");
+        assert_eq!(delta[1]["attributes"]["align"], "right");
     }
 }

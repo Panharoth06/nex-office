@@ -7,10 +7,9 @@ export interface RichRenderOptions {
 }
 
 /**
- * Draw selection highlights and styled text runs for laid-out lines.
- *
- * The paint order is selection first, then glyphs, so selected text stays
- * readable. Underlines are drawn after their run.
+ * Draw list markers, selection highlights, and styled text runs for laid-out
+ * lines. All horizontal geometry comes from `LineBox.left`/`prefixX` so the
+ * renderer, caret, and hit-testing never drift apart.
  */
 export function drawRichDocument(
   ctx: CanvasRenderingContext2D,
@@ -20,12 +19,20 @@ export function drawRichDocument(
   const { selectionStart, selectionEnd, margin } = options
 
   for (const line of lines) {
+    if (line.prefix && line.prefixX !== undefined) {
+      ctx.font = fontForStyle(line.style)
+      ctx.fillStyle = '#0f172a'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText(line.prefix, margin + line.prefixX, line.y)
+    }
+
     const from = Math.max(selectionStart, line.start)
     const to = Math.min(selectionEnd, line.end)
 
     if (from < to) {
-      const x1 = margin + (line.xs[from - line.start] ?? 0)
-      const x2 = margin + (line.xs[to - line.start] ?? 0)
+      const x1 = margin + line.left + (line.xs[from - line.start] ?? 0)
+      const x2 = margin + line.left + (line.xs[to - line.start] ?? 0)
       ctx.fillStyle = '#dbeafe'
       ctx.fillRect(x1, line.y, x2 - x1, line.height)
     }
@@ -42,9 +49,13 @@ export function drawRichDocument(
         .slice(offset, end)
         .map((item) => item.char)
         .join('')
-      const x = margin + (line.xs[offset] ?? 0)
+      const x = margin + line.left + (line.xs[offset] ?? 0)
+      const runStyle: TextStyle = {
+        ...style,
+        paragraph: line.style.paragraph,
+      }
 
-      ctx.font = fontForStyle(style)
+      ctx.font = fontForStyle(runStyle)
       ctx.fillStyle = '#0f172a'
       ctx.textAlign = 'left'
       ctx.textBaseline = 'top'

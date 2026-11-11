@@ -7,6 +7,8 @@
       @rename="handleRename"
       @format="handleFormat"
       @paragraph="handleParagraph"
+      @list="handleList"
+      @align="handleAlign"
     />
 
     <div class="relative flex flex-1 justify-center overflow-auto px-4 py-8 oe-scroll">
@@ -57,8 +59,10 @@ import { getDocument, renameDocument } from '~/lib/api/documents'
 import { isNotFound, isUnauthorized } from '~/lib/api/client'
 import {
   EMPTY_FORMAT_STATE,
+  type Alignment,
   type FormatKey,
   type FormatState,
+  type ListType,
   type ParagraphStyle,
 } from '~/lib/editor/richText'
 
@@ -95,6 +99,14 @@ function handleFormat(key: FormatKey) {
 
 function handleParagraph(style: ParagraphStyle) {
   canvasRef.value?.setParagraphStyle(style)
+}
+
+function handleList(type: ListType) {
+  canvasRef.value?.toggleList(type)
+}
+
+function handleAlign(align: Alignment) {
+  canvasRef.value?.setAlignment(align)
 }
 
 async function handleRename(title: string) {

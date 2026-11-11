@@ -1,13 +1,28 @@
 import { computed, ref, type Ref } from 'vue'
-import { hitTestChar, lineForIndex, type LineBox } from '~/lib/editor/textLayout'
+import { hitTestChar, type LineBox } from '~/lib/editor/textLayout'
 import {
   EMPTY_FORMAT_STATE,
+  formatStateAtCaret,
   formatStateForRange,
+  type Alignment,
   type FormatKey,
   type FormatState,
+  type ListType,
   type ParagraphStyle,
 } from '~/lib/editor/richText'
+import {
+  applyBlockState,
+  applyInlineFormat,
+  blockFormatState,
+  blocksForRange,
+  changeListLevelRange,
+  setAlignmentRange,
+  toggleListRange,
+} from '~/lib/editor/editorCommands'
 import type { TextEngine } from '~/lib/editor/useEngine'
+import { useEditorKeyboard } from '~/composables/useEditorKeyboard'
+import { useEditorPointer } from '~/composables/useEditorPointer'
+import { useEditorTyping } from '~/composables/useEditorTyping'
 
 export interface EditorSelectionOptions {
   engine: () => TextEngine | null
@@ -17,7 +32,6 @@ export interface EditorSelectionOptions {
   caretIndex: Ref<number>
   caretX: () => number
   margin: number
-  lineHeight: number
   ready: () => boolean
   focus: () => void
   redraw: () => void
@@ -27,16 +41,13 @@ export interface EditorSelectionOptions {
   onFormatState: (state: FormatState) => void
 }
 
-const FORMAT_KEYS: FormatKey[] = ['bold', 'italic', 'underline']
-
 /**
- * Selection, keyboard navigation, formatting, and pointer selection for the
- * canvas editor. Keeping this out of `CanvasSurface.vue` preserves the
- * component's size budget and makes the editing rules unit-testable.
+ * Selection, keyboard navigation, and editing commands for the canvas editor.
+ * Pure range/mark work lives in `editorCommands.ts`; this composable owns the
+ * reactive caret, pending typing style, pointer interaction, and redraw cycle.
  */
 export function useEditorSelection(options: EditorSelectionOptions) {
   const anchorIndex = ref<number | null>(null)
-  const isSelecting = ref(false)
   // Style applied to text typed at a collapsed caret, mirroring canvas-editor's
   // range.setDefaultStyle() behaviour.
   const pendingFormat = ref<FormatState | null>(null)
@@ -56,11 +67,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
   function styleAtCaret(): FormatState {
     const engine = options.engine()
     if (!engine) return { ...EMPTY_FORMAT_STATE }
-    return formatStateForRange(
-      engine.getDelta(),
-      options.caretIndex.value,
-      options.caretIndex.value,
-    )
+    return formatStateAtCaret(engine.getDelta(), options.caretIndex.value)
   }
 
   function currentFormatState(): FormatState {
@@ -78,50 +85,6 @@ export function useEditorSelection(options: EditorSelectionOptions) {
 
   function syncPendingToCaret() {
     pendingFormat.value = hasSelection.value ? null : styleAtCaret()
-  }
-
-  function applyFormat(
-    engine: TextEngine,
-    start: number,
-    end: number,
-    state: FormatState,
-  ) {
-    if (start >= end) return
-    for (const key of FORMAT_KEYS) {
-      engine.setMark(start, end, key, state[key])
-    }
-    if (state.paragraph === 'normal') {
-      engine.clearMark(start, end, 'paragraph')
-    } else {
-      engine.setMarkValue(start, end, 'paragraph', state.paragraph)
-    }
-  }
-
-  function paragraphRanges(
-    text: string,
-    start: number,
-    end: number,
-  ): Array<{ start: number; end: number }> {
-    const chars = Array.from(text)
-    const ranges: Array<{ start: number; end: number }> = []
-    let lineStart = 0
-
-    for (let index = 0; index <= chars.length; index += 1) {
-      if (index !== chars.length && chars[index] !== '\n') continue
-
-      const lineEnd = index
-      const intersects =
-        end > start
-          ? lineStart < end && lineEnd > start
-          : start >= lineStart && start <= lineEnd
-
-      if (intersects && lineEnd > lineStart) {
-        ranges.push({ start: lineStart, end: lineEnd })
-      }
-      lineStart = index + 1
-    }
-
-    return ranges
   }
 
   function deleteSelection(): boolean {
@@ -155,9 +118,9 @@ export function useEditorSelection(options: EditorSelectionOptions) {
 
     if (hasSelection.value) {
       const start = selectionStart.value
-      const end = selectionEnd.value
-      applyFormat(engine, start, end, next)
-      pendingFormat.value = next
+      applyInlineFormat(engine, start, selectionEnd.value, next)
+      const startState = formatStateAtCaret(engine.getDelta(), start)
+      pendingFormat.value = { ...startState, [key]: next[key] }
       options.redraw()
       options.scheduleSave()
       return
@@ -221,156 +184,126 @@ export function useEditorSelection(options: EditorSelectionOptions) {
 
     const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
     const end = hasSelection.value ? selectionEnd.value : start
-    const ranges = paragraphRanges(engine.getText(), start, end)
+    const inlineState = currentFormatState()
 
-    for (const range of ranges) {
-      if (style === 'normal') {
-        engine.clearMark(range.start, range.end, 'paragraph')
-      } else {
-        engine.setMarkValue(range.start, range.end, 'paragraph', style)
-      }
+    for (const block of blocksForRange(engine.getDelta(), start, end)) {
+      const current = blockFormatState(block)
+      applyBlockState(engine, block, { ...current, paragraph: style })
     }
 
-    pendingFormat.value = { ...currentFormatState(), paragraph: style }
+    pendingFormat.value = { ...inlineState, paragraph: style }
     options.redraw()
     options.scheduleSave()
   }
 
-  function insertText(text: string) {
-    const engine = options.engine()
-    if (!engine || !text) return
-
-    const format = currentFormatState()
-    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
-    if (hasSelection.value) {
-      engine.deleteRange(start, selectionEnd.value - start)
-      anchorIndex.value = null
-    }
-
-    engine.insertText(start, text)
-    const end = start + Array.from(text).length
-    applyFormat(engine, start, end, format)
-    options.caretIndex.value = end
-    pendingFormat.value = format
-
-    options.redraw()
-    options.scheduleSave()
-  }
-
-  function onKeydown(event: KeyboardEvent) {
-    const engine = options.engine()
-    if (event.isComposing || !engine) return
-
-    const max = Array.from(engine.getText()).length
-
-    switch (event.key) {
-      case 'Backspace':
-        event.preventDefault()
-        if (hasSelection.value) {
-          deleteSelection()
-          options.redraw()
-          options.scheduleSave()
-        } else if (options.caretIndex.value > 0) {
-          engine.deleteRange(options.caretIndex.value - 1, 1)
-          options.caretIndex.value -= 1
-          options.redraw()
-          options.scheduleSave()
-        }
-        break
-      case 'Delete':
-        event.preventDefault()
-        if (hasSelection.value) {
-          deleteSelection()
-          options.redraw()
-          options.scheduleSave()
-        } else if (options.caretIndex.value < max) {
-          engine.deleteRange(options.caretIndex.value, 1)
-          options.redraw()
-          options.scheduleSave()
-        }
-        break
-      case 'ArrowLeft':
-        event.preventDefault()
-        moveCaret(Math.max(0, options.caretIndex.value - 1), event.shiftKey)
-        break
-      case 'ArrowRight':
-        event.preventDefault()
-        moveCaret(Math.min(max, options.caretIndex.value + 1), event.shiftKey)
-        break
-      case 'ArrowUp':
-        event.preventDefault()
-        moveVertical(-1, event.shiftKey)
-        break
-      case 'ArrowDown':
-        event.preventDefault()
-        moveVertical(1, event.shiftKey)
-        break
-      case 'Home':
-        event.preventDefault()
-        moveCaret(
-          lineForIndex(options.lines(), options.caretIndex.value).start,
-          event.shiftKey,
-        )
-        break
-      case 'End':
-        event.preventDefault()
-        moveCaret(
-          lineForIndex(options.lines(), options.caretIndex.value).end,
-          event.shiftKey,
-        )
-        break
-      case 'Tab':
-        event.preventDefault()
-        insertText('  ')
-        break
-    }
-  }
-
-  function handleMouseDown(event: MouseEvent) {
-    event.preventDefault()
+  function toggleList(type: ListType) {
     options.focus()
-    if (!options.ready()) return
 
-    const index = indexAt(event)
-    if (index === null) return
+    const engine = options.engine()
+    if (!engine) return
 
-    anchorIndex.value = index
-    options.caretIndex.value = index
-    isSelecting.value = true
-    syncPendingToCaret()
+    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
+    const end = hasSelection.value ? selectionEnd.value : start
+    const inlineState = currentFormatState()
+    const next = toggleListRange(engine, start, end, type)
+    if (!next) return
+
+    pendingFormat.value = {
+      ...next,
+      bold: inlineState.bold,
+      italic: inlineState.italic,
+      underline: inlineState.underline,
+    }
     options.redraw()
+    options.scheduleSave()
   }
 
-  function handleMouseMove(event: MouseEvent) {
-    if (!isSelecting.value || !options.ready()) return
+  function setAlignment(align: Alignment) {
+    options.focus()
 
-    const index = indexAt(event)
-    if (index === null) return
+    const engine = options.engine()
+    if (!engine) return
 
-    options.caretIndex.value = index
-    syncPendingToCaret()
+    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
+    const end = hasSelection.value ? selectionEnd.value : start
+    const inlineState = currentFormatState()
+    const next = setAlignmentRange(engine, start, end, align)
+    if (!next) return
+
+    pendingFormat.value = {
+      ...next,
+      bold: inlineState.bold,
+      italic: inlineState.italic,
+      underline: inlineState.underline,
+    }
     options.redraw()
+    options.scheduleSave()
   }
 
-  function stopSelecting() {
-    isSelecting.value = false
+  function changeListLevel(delta: number): boolean {
+    const engine = options.engine()
+    if (!engine) return false
+
+    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
+    const end = hasSelection.value ? selectionEnd.value : start
+    const inlineState = currentFormatState()
+    const next = changeListLevelRange(engine, start, end, delta)
+    if (!next) return false
+
+    pendingFormat.value = {
+      ...next,
+      bold: inlineState.bold,
+      italic: inlineState.italic,
+      underline: inlineState.underline,
+    }
+    options.redraw()
+    options.scheduleSave()
+    return true
   }
 
-  function indexAt(event: MouseEvent): number | null {
-    const context = options.context()
-    const page = options.page()
-    const lines = options.lines()
-    if (!context || !page || lines.length === 0) return null
+  const { insertText, insertBreak } = useEditorTyping({
+    engine: options.engine,
+    caretIndex: options.caretIndex,
+    anchorIndex,
+    hasSelection: () => hasSelection.value,
+    selectionStart: () => selectionStart.value,
+    selectionEnd: () => selectionEnd.value,
+    pendingFormat,
+    currentFormatState,
+    styleAtCaret,
+    deleteSelection,
+    redraw: options.redraw,
+    scheduleSave: options.scheduleSave,
+  })
 
-    const rect = page.getBoundingClientRect()
-    return hitTestChar(
-      context,
-      lines,
-      event.clientX - rect.left,
-      event.clientY - rect.top,
-      options.margin,
-    )
-  }
+  const { handleMouseDown, handleMouseMove, stopSelecting } = useEditorPointer({
+    lines: options.lines,
+    context: options.context,
+    page: options.page,
+    caretIndex: options.caretIndex,
+    anchorIndex,
+    margin: options.margin,
+    ready: options.ready,
+    focus: options.focus,
+    syncPending: syncPendingToCaret,
+    redraw: options.redraw,
+  })
+
+  const { onKeydown } = useEditorKeyboard({
+    engine: options.engine,
+    caretIndex: options.caretIndex,
+    lines: options.lines,
+    hasSelection: () => hasSelection.value,
+    moveCaret,
+    moveVertical,
+    deleteSelection,
+    insertBreak,
+    insertText,
+    changeListLevel,
+    syncPending: syncPendingToCaret,
+    redraw: options.redraw,
+    scheduleSave: options.scheduleSave,
+  })
 
   return {
     selectionStart,
@@ -378,6 +311,8 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     hasSelection,
     currentFormatState,
     setParagraphStyle,
+    toggleList,
+    setAlignment,
     insertText,
     deleteSelection,
     clampSelection,

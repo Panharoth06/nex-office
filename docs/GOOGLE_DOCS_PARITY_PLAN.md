@@ -98,12 +98,22 @@ repository is not. Implement our own code and tests after studying it.
 - [x] Multi-page A4 pagination and page numbers.
 - [x] Paragraph styles (Normal / H1–H3) stored as CRDT marks with variable
       line heights.
-- [ ] Lists, alignment, spacing, and block commands.
+- [x] Bullet and numbered lists with nested levels, list-aware Enter/Tab/
+      Backspace behavior, and left/center/right paragraph alignment.
+- [ ] Paragraph spacing, indentation outside lists, justified alignment, and
+      further block commands.
 - [ ] Headers and footers.
 - [ ] Paint-command IR + CanvasKit renderer.
 - [ ] R-tree hit-testing for large documents.
 - [ ] Links, images, basic tables.
 - [ ] Gate: formatted multi-page document edits at 60 FPS.
+
+Block attributes (`paragraph`, `list`, `list_level`, `align`) are stored as
+Loro text marks on the paragraph text and on the newline before the paragraph.
+The leading newline describes the paragraph that follows it, which lets empty
+list items and trailing paragraphs survive reloads. This remains an interim
+mark-based block model until headers/footers force a shared document-zone
+refactor.
 
 ### Phase 2 — Collaboration
 - Loro relay, Redis pub/sub, presence, snapshot flush, reconnect.

@@ -30,49 +30,13 @@
       </div>
     </div>
 
-    <!-- Quick Action Formatting Bar -->
-    <div class="hidden items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-1 md:flex">
-      <UiButton
-        variant="ghost"
-        size="icon"
-        aria-label="Bold"
-        @mousedown.prevent
-        :aria-pressed="formatState.bold"
-        @click="emit('format', 'bold')"
-      >
-        <Bold class="h-3.5 w-3.5" aria-hidden="true" />
-      </UiButton>
-      <UiButton
-        variant="ghost"
-        size="icon"
-        aria-label="Italic"
-        @mousedown.prevent
-        :aria-pressed="formatState.italic"
-        @click="emit('format', 'italic')"
-      >
-        <Italic class="h-3.5 w-3.5" aria-hidden="true" />
-      </UiButton>
-      <UiButton
-        variant="ghost"
-        size="icon"
-        aria-label="Underline"
-        @mousedown.prevent
-        :aria-pressed="formatState.underline"
-        @click="emit('format', 'underline')"
-      >
-        <Underline class="h-3.5 w-3.5" aria-hidden="true" />
-      </UiButton>
-
-      <span class="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
-
-      <UiSelect
-        :model-value="formatState.paragraph"
-        :options="paragraphOptions"
-        variant="inline"
-        aria-label="Paragraph style"
-        @update:model-value="onParagraphChange"
-      />
-    </div>
+    <EditorFormattingBar
+      :format-state="formatState"
+      @format="emit('format', $event)"
+      @paragraph="emit('paragraph', $event)"
+      @list="emit('list', $event)"
+      @align="emit('align', $event)"
+    />
 
     <!-- Right Controls: Active Collaborators & Share Button -->
     <div class="flex items-center gap-3">
@@ -119,26 +83,27 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ArrowLeft, Bold, Italic, Lock, Underline } from 'lucide-vue-next'
+import { ArrowLeft, Lock } from 'lucide-vue-next'
+import EditorFormattingBar from './FormattingBar.vue'
 import EditorShareModal from './ShareModal.vue'
 import UiButton from '~/components/shared/UiButton.vue'
 import UiMenu from '~/components/shared/UiMenu.vue'
-import UiSelect from '~/components/shared/UiSelect.vue'
 import UiTextField from '~/components/shared/UiTextField.vue'
 import UiTooltip from '~/components/shared/UiTooltip.vue'
 import type { MenuItem } from '~/lib/ui/types'
-import type { ParagraphStyle } from '~/lib/editor/richText'
+import type {
+  Alignment,
+  FormatKey,
+  FormatState,
+  ListType,
+  ParagraphStyle,
+} from '~/lib/editor/richText'
 
 const props = withDefaults(
   defineProps<{
     title: string
     docId: string
-    formatState: {
-      bold: boolean
-      italic: boolean
-      underline: boolean
-      paragraph: ParagraphStyle
-    }
+    formatState: FormatState
   }>(),
   {
     formatState: () => ({
@@ -146,14 +111,19 @@ const props = withDefaults(
       italic: false,
       underline: false,
       paragraph: 'normal',
+      list: null,
+      listLevel: 0,
+      align: 'left',
     }),
   },
 )
 
 const emit = defineEmits<{
   (e: 'rename', title: string): void
-  (e: 'format', key: 'bold' | 'italic' | 'underline'): void
+  (e: 'format', key: FormatKey): void
   (e: 'paragraph', style: ParagraphStyle): void
+  (e: 'list', type: ListType): void
+  (e: 'align', align: Alignment): void
 }>()
 
 const localTitle = ref(props.title)
@@ -176,21 +146,10 @@ function commitTitle() {
   emit('rename', title)
 }
 
-function onParagraphChange(style: ParagraphStyle) {
-  emit('paragraph', style)
-}
-
 function onTitleEnter(event: KeyboardEvent) {
   const target = event.target
   if (target instanceof HTMLInputElement) target.blur()
 }
-
-const paragraphOptions = [
-  { value: 'normal', label: 'Normal text' },
-  { value: 'h1', label: 'Heading 1' },
-  { value: 'h2', label: 'Heading 2' },
-  { value: 'h3', label: 'Heading 3' },
-] as const
 
 const menus: ReadonlyArray<{ label: string; items: MenuItem[] }> = [
   {

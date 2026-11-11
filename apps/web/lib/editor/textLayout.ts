@@ -1,10 +1,18 @@
+import { listMarkers } from './listNumbering'
+import { paragraphBlocks } from './paragraphs'
+
 export type ParagraphStyle = 'normal' | 'h1' | 'h2' | 'h3'
+export type ListType = 'ul' | 'ol'
+export type Alignment = 'left' | 'center' | 'right'
 
 export interface TextStyle {
   bold?: boolean
   italic?: boolean
   underline?: boolean
   paragraph?: ParagraphStyle
+  list?: ListType
+  listLevel?: number
+  align?: Alignment
 }
 
 export interface StyledChar {
@@ -23,6 +31,15 @@ export interface LineBox {
   /** Height of this line, which varies for headings. */
   height: number
   page: number
+  /** Text start relative to the content margin. */
+  left: number
+  /** Width of the visible text, excluding a list marker. */
+  width: number
+  /** Block style shared by every character in the paragraph. */
+  style: TextStyle
+  prefix?: string
+  /** Marker start relative to the content margin. */
+  prefixX?: number
 }
 
 export interface PageLayout {
@@ -40,6 +57,11 @@ export interface CaretRect {
 
 export const DOC_FONT_FAMILY =
   '"Helvetica Neue", Arial, "Noto Sans CJK SC", "Noto Sans", sans-serif'
+
+/** Horizontal indent for each nested list level. */
+export const LIST_INDENT_WIDTH = 30
+/** Gap between a list marker and its text. */
+export const LIST_MARKER_GAP = 10
 
 /** Font size for a paragraph style. */
 export function fontSizeForStyle(style: TextStyle): number {
@@ -97,10 +119,14 @@ export function measureStyledChars(
 }
 
 /**
- * Wrap styled Unicode code points into visual lines.
+ * Wrap paragraph blocks into visual lines.
  *
+ * List indentation and aligned-line offsets follow canvas-editor's
+ * LayoutEngine/Position geometry (MIT), reimplemented for our line model.
  * Positions are measured in Unicode code points (what Loro uses), not UTF-16
- * code units, so emoji and other non-BMP characters stay aligned.
+ * code units, so emoji and other non-BMP characters stay aligned. List markers
+ * and alignment offsets are resolved here so caret placement and hit-testing
+ * share exactly the same geometry as rendering.
  */
 export function layoutChars(
   ctx: CanvasRenderingContext2D,
@@ -111,74 +137,97 @@ export function layoutChars(
   page?: PageLayout,
 ): LineBox[] {
   const lines: LineBox[] = []
-  let lineChars: StyledChar[] = []
-  let lineXs: number[] = [0]
-  let lineStart = 0
-  let width = 0
+  const blocks = paragraphBlocks(chars)
+  const markers = listMarkers(blocks)
+  const stride = page ? page.pageHeight + page.pageGap : 0
   let pageIndex = 0
   let y = top
-  let currentHeight = lineHeight
-  const stride = page ? page.pageHeight + page.pageGap : 0
 
-  const pushLine = () => {
-    lines.push({
-      chars: lineChars,
-      xs: lineXs,
-      start: lineStart,
-      end: lineStart + lineChars.length,
-      y,
-      height: currentHeight,
-      page: pageIndex,
-    })
-    y += currentHeight
-    currentHeight = lineHeight
-    lineChars = []
-    lineXs = [0]
-    width = 0
-    ensureSpace()
-  }
+  const pageBottom = () =>
+    page ? pageIndex * stride + page.pageHeight - page.marginBottom : 0
 
-  const ensureSpace = () => {
+  const ensureSpace = (height: number) => {
     if (!page) return
-    const bottom = pageIndex * stride + page.pageHeight - page.marginBottom
-    if (y + lineHeight > bottom) {
+    if (y + height > pageBottom()) {
       pageIndex += 1
       y = pageIndex * stride + page.marginTop
     }
   }
 
-  for (let index = 0; index < chars.length; index++) {
-    const item = chars[index]
+  blocks.forEach((block, blockIndex) => {
+    const marker = markers[blockIndex]
+    const level = marker?.level ?? 0
+    const indent = marker ? level * LIST_INDENT_WIDTH : 0
+    const height = lineHeightForStyle(block.style)
+    let prefixReserve = 0
 
-    if (item.char === '\n') {
-      pushLine()
-      lineStart = index + 1
-      continue
+    if (marker) {
+      ctx.font = fontForStyle(block.style)
+      prefixReserve = ctx.measureText(marker.prefix).width + LIST_MARKER_GAP
     }
 
-    ctx.font = fontForStyle(item.style)
-    const charWidth = ctx.measureText(item.char).width
-    if (width + charWidth > maxWidth && lineChars.length > 0) {
-      pushLine()
-      lineStart = index
-    }
+    const textMaxWidth = Math.max(12, maxWidth - indent - prefixReserve)
+    let lineChars: StyledChar[] = []
+    let lineXs: number[] = [0]
+    let lineStart = block.start
+    let lineWidth = 0
+    let firstLine = true
 
-    const styleHeight = lineHeightForStyle(item.style)
-    if (lineChars.length === 0 && page) {
-      const bottom = pageIndex * stride + page.pageHeight - page.marginBottom
-      if (y + Math.max(lineHeight, styleHeight) > bottom) {
-        pageIndex += 1
-        y = pageIndex * stride + page.marginTop
+    const pushLine = () => {
+      const contentWidth = prefixReserve + lineWidth
+      const available = Math.max(0, maxWidth - indent)
+      let offset = 0
+      if (block.style.align === 'center') {
+        offset = (available - contentWidth) / 2
+      } else if (block.style.align === 'right') {
+        offset = available - contentWidth
       }
+      offset = Math.max(0, offset)
+
+      const prefixX = indent + offset
+      const textLeft = prefixX + prefixReserve
+      ensureSpace(height)
+      lines.push({
+        chars: lineChars,
+        xs: lineXs,
+        start: lineStart,
+        end: lineStart + lineChars.length,
+        y,
+        height,
+        page: pageIndex,
+        left: textLeft,
+        width: lineWidth,
+        style: block.style,
+        prefix: firstLine && marker ? marker.prefix : undefined,
+        prefixX: firstLine && marker ? prefixX : undefined,
+      })
+      y += height
+      firstLine = false
+      lineChars = []
+      lineXs = [0]
+      lineWidth = 0
     }
-    currentHeight = Math.max(currentHeight, styleHeight)
 
-    lineChars.push(item)
-    lineXs.push(lineXs[lineXs.length - 1] + charWidth)
-    width += charWidth
-  }
+    for (let index = block.start; index < block.end; index += 1) {
+      const item = chars[index]
+      ctx.font = fontForStyle({
+        ...item.style,
+        paragraph: block.style.paragraph,
+      })
+      const charWidth = ctx.measureText(item.char).width
 
-  pushLine()
+      if (lineWidth + charWidth > textMaxWidth && lineChars.length > 0) {
+        pushLine()
+        lineStart = index
+      }
+
+      lineChars.push(item)
+      lineXs.push(lineXs[lineXs.length - 1] + charWidth)
+      lineWidth += charWidth
+    }
+
+    pushLine()
+  })
 
   return lines
 }
@@ -193,7 +242,7 @@ export function caretRect(
   const offset = Math.min(Math.max(index - line.start, 0), line.chars.length)
 
   return {
-    x: left + (line.xs[offset] ?? 0),
+    x: left + line.left + (line.xs[offset] ?? 0),
     y: line.y,
     height: line.height,
   }
@@ -207,15 +256,16 @@ export function hitTestChar(
   left: number,
 ): number {
   const line = lineForY(lines, y)
+  const contentX = x - left - line.left
 
-  if (x <= left || line.chars.length === 0) {
+  if (contentX <= 0 || line.chars.length === 0) {
     return line.start
   }
 
   for (let offset = 0; offset < line.chars.length; offset++) {
     const start = line.xs[offset] ?? 0
     const end = line.xs[offset + 1] ?? start
-    if (x < left + start + (end - start) / 2) {
+    if (contentX < start + (end - start) / 2) {
       return line.start + offset
     }
   }
@@ -225,8 +275,9 @@ export function hitTestChar(
 
 export function lineForIndex(lines: LineBox[], index: number): LineBox {
   return (
-    lines.find((line) => index >= line.start && index <= line.end) ??
-    lines[lines.length - 1]
+    lines.find((line) => index >= line.start && index < line.end) ??
+    lines.find((line) => index === line.end) ??
+    (index < lines[0]?.start ? lines[0] : lines[lines.length - 1])
   )
 }
 

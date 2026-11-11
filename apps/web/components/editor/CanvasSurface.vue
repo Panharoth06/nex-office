@@ -65,12 +65,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import EditorHiddenInput from './HiddenInput.vue'
-import { layoutChars, caretRect, hitTestChar, lineForIndex, type LineBox } from '~/lib/editor/textLayout'
+import { layoutChars, caretRect, type LineBox } from '~/lib/editor/textLayout'
 import { drawPageBackground, setupCanvas } from '~/lib/editor/canvas'
 import { loadEngine, type TextEngine } from '~/lib/editor/useEngine'
 import {
   styledCharsFromDelta,
+  type Alignment,
   type FormatState,
+  type ListType,
 } from '~/lib/editor/richText'
 import { drawRichDocument } from '~/lib/editor/renderDocument'
 import { useEditorSelection } from '~/composables/useEditorSelection'
@@ -127,6 +129,8 @@ const {
   selectionEnd,
   currentFormatState,
   setParagraphStyle,
+  toggleList,
+  setAlignment,
   insertText,
   clampSelection,
   toggleMark,
@@ -142,7 +146,6 @@ const {
   caretIndex,
   caretX: () => caret.value.x,
   margin,
-  lineHeight,
   ready: () => ready.value,
   focus,
   redraw,
@@ -279,7 +282,7 @@ function drawOverlay() {
 
   if (ready.value && caretVisible) {
     overlayCtx.fillStyle = '#2563eb'
-    overlayCtx.fillRect(caret.value.x, caret.value.y, 2, lineHeight)
+    overlayCtx.fillRect(caret.value.x, caret.value.y, 2, caret.value.height)
   }
 
   if (composing.value) {
@@ -289,7 +292,7 @@ function drawOverlay() {
     overlayCtx.fillText(composing.value, caret.value.x + 2, caret.value.y)
     overlayCtx.fillRect(
       caret.value.x + 2,
-      caret.value.y + lineHeight - 2,
+      caret.value.y + caret.value.height - 2,
       overlayCtx.measureText(composing.value).width,
       1,
     )
@@ -326,5 +329,11 @@ function onComposition(text: string, isEnd: boolean) {
   if (text) onTextInput(text)
 }
 
-defineExpose({ toggleMark, setParagraphStyle })
+defineExpose({
+  toggleMark,
+  setParagraphStyle,
+  toggleList: (type: ListType) => toggleList(type),
+  setAlignment: (align: Alignment) => setAlignment(align),
+})
+
 </script>
