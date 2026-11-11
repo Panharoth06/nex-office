@@ -4,7 +4,6 @@ export interface RichRenderOptions {
   selectionStart: number
   selectionEnd: number
   margin: number
-  lineHeight: number
 }
 
 /**
@@ -18,7 +17,7 @@ export function drawRichDocument(
   lines: LineBox[],
   options: RichRenderOptions,
 ): void {
-  const { selectionStart, selectionEnd, margin, lineHeight } = options
+  const { selectionStart, selectionEnd, margin } = options
 
   for (const line of lines) {
     const from = Math.max(selectionStart, line.start)
@@ -28,7 +27,7 @@ export function drawRichDocument(
       const x1 = margin + (line.xs[from - line.start] ?? 0)
       const x2 = margin + (line.xs[to - line.start] ?? 0)
       ctx.fillStyle = '#dbeafe'
-      ctx.fillRect(x1, line.y, x2 - x1, lineHeight)
+      ctx.fillRect(x1, line.y, x2 - x1, line.height)
     }
 
     let offset = 0
@@ -53,7 +52,7 @@ export function drawRichDocument(
 
       if (style.underline) {
         const width = (line.xs[end] ?? 0) - (line.xs[offset] ?? 0)
-        ctx.fillRect(x, line.y + lineHeight - 3, width, 1)
+        ctx.fillRect(x, line.y + line.height - 3, width, 1)
       }
 
       offset = end

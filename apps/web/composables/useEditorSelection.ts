@@ -5,6 +5,7 @@ import {
   formatStateForRange,
   type FormatKey,
   type FormatState,
+  type ParagraphStyle,
 } from '~/lib/editor/richText'
 import type { TextEngine } from '~/lib/editor/useEngine'
 
@@ -89,6 +90,38 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     for (const key of FORMAT_KEYS) {
       engine.setMark(start, end, key, state[key])
     }
+    if (state.paragraph === 'normal') {
+      engine.clearMark(start, end, 'paragraph')
+    } else {
+      engine.setMarkValue(start, end, 'paragraph', state.paragraph)
+    }
+  }
+
+  function paragraphRanges(
+    text: string,
+    start: number,
+    end: number,
+  ): Array<{ start: number; end: number }> {
+    const chars = Array.from(text)
+    const ranges: Array<{ start: number; end: number }> = []
+    let lineStart = 0
+
+    for (let index = 0; index <= chars.length; index += 1) {
+      if (index !== chars.length && chars[index] !== '\n') continue
+
+      const lineEnd = index
+      const intersects =
+        end > start
+          ? lineStart < end && lineEnd > start
+          : start >= lineStart && start <= lineEnd
+
+      if (intersects && lineEnd > lineStart) {
+        ranges.push({ start: lineStart, end: lineEnd })
+      }
+      lineStart = index + 1
+    }
+
+    return ranges
   }
 
   function deleteSelection(): boolean {
@@ -165,9 +198,8 @@ export function useEditorSelection(options: EditorSelectionOptions) {
       context,
       [target],
       options.caretX(),
-      target.y + options.lineHeight / 2,
+      target.y + target.height / 2,
       options.margin,
-      options.lineHeight,
     )
 
     if (extend && anchorIndex.value === null) {
@@ -179,6 +211,29 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     syncPendingToCaret()
     options.updateCaret()
     options.markTyped()
+  }
+
+  function setParagraphStyle(style: ParagraphStyle) {
+    options.focus()
+
+    const engine = options.engine()
+    if (!engine) return
+
+    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
+    const end = hasSelection.value ? selectionEnd.value : start
+    const ranges = paragraphRanges(engine.getText(), start, end)
+
+    for (const range of ranges) {
+      if (style === 'normal') {
+        engine.clearMark(range.start, range.end, 'paragraph')
+      } else {
+        engine.setMarkValue(range.start, range.end, 'paragraph', style)
+      }
+    }
+
+    pendingFormat.value = { ...currentFormatState(), paragraph: style }
+    options.redraw()
+    options.scheduleSave()
   }
 
   function insertText(text: string) {
@@ -314,7 +369,6 @@ export function useEditorSelection(options: EditorSelectionOptions) {
       event.clientX - rect.left,
       event.clientY - rect.top,
       options.margin,
-      options.lineHeight,
     )
   }
 
@@ -323,6 +377,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     selectionEnd,
     hasSelection,
     currentFormatState,
+    setParagraphStyle,
     insertText,
     deleteSelection,
     clampSelection,

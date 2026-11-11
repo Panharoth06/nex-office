@@ -66,10 +66,11 @@
       <span class="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
 
       <UiSelect
-        v-model="paragraphStyle"
+        :model-value="formatState.paragraph"
         :options="paragraphOptions"
         variant="inline"
         aria-label="Paragraph style"
+        @update:model-value="onParagraphChange"
       />
     </div>
 
@@ -126,27 +127,38 @@ import UiSelect from '~/components/shared/UiSelect.vue'
 import UiTextField from '~/components/shared/UiTextField.vue'
 import UiTooltip from '~/components/shared/UiTooltip.vue'
 import type { MenuItem } from '~/lib/ui/types'
+import type { ParagraphStyle } from '~/lib/editor/richText'
 
 const props = withDefaults(
   defineProps<{
     title: string
     docId: string
-    formatState: { bold: boolean; italic: boolean; underline: boolean }
+    formatState: {
+      bold: boolean
+      italic: boolean
+      underline: boolean
+      paragraph: ParagraphStyle
+    }
   }>(),
   {
-    formatState: () => ({ bold: false, italic: false, underline: false }),
+    formatState: () => ({
+      bold: false,
+      italic: false,
+      underline: false,
+      paragraph: 'normal',
+    }),
   },
 )
 
 const emit = defineEmits<{
   (e: 'rename', title: string): void
   (e: 'format', key: 'bold' | 'italic' | 'underline'): void
+  (e: 'paragraph', style: ParagraphStyle): void
 }>()
 
 const localTitle = ref(props.title)
 const lastSavedTitle = ref(props.title)
 const isShareOpen = ref(false)
-const paragraphStyle = ref<'normal' | 'h1' | 'h2' | 'h3'>('normal')
 
 watch(
   () => props.title,
@@ -162,6 +174,10 @@ function commitTitle() {
   if (title === lastSavedTitle.value) return
   lastSavedTitle.value = title
   emit('rename', title)
+}
+
+function onParagraphChange(style: ParagraphStyle) {
+  emit('paragraph', style)
 }
 
 function onTitleEnter(event: KeyboardEvent) {

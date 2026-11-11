@@ -5,6 +5,8 @@ export interface TextEngine {
   deleteRange(pos: number, len: number): void
   getText(): string
   setMark(start: number, end: number, key: FormatKey, enabled: boolean): void
+  clearMark(start: number, end: number, key: string): void
+  setMarkValue(start: number, end: number, key: string, value: string): void
   getDelta(): TextDeltaSegment[]
   exportSnapshot(): Uint8Array
   importSnapshot(bytes: Uint8Array): void
@@ -15,6 +17,7 @@ interface WasmEngineCore {
   delete_range(pos: number, len: number): void
   get_text(): string
   set_mark(start: number, end: number, key: string, enabled: boolean): void
+  set_mark_value(start: number, end: number, key: string, value: string): void
   get_delta(): string
   export_snapshot(): Uint8Array
   import_snapshot(bytes: Uint8Array): void
@@ -52,6 +55,8 @@ export async function loadEngine(): Promise<TextEngine> {
     deleteRange: (pos, len) => core.delete_range(pos, len),
     getText: () => core.get_text(),
     setMark: (start, end, key, enabled) => core.set_mark(start, end, key, enabled),
+    clearMark: (start, end, key) => core.set_mark(start, end, key, false),
+    setMarkValue: (start, end, key, value) => core.set_mark_value(start, end, key, value),
     getDelta: () => {
       try {
         return JSON.parse(core.get_delta()) as TextDeltaSegment[]

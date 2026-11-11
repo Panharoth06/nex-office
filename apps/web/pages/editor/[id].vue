@@ -6,6 +6,7 @@
       :format-state="formatState"
       @rename="handleRename"
       @format="handleFormat"
+      @paragraph="handleParagraph"
     />
 
     <div class="relative flex flex-1 justify-center overflow-auto px-4 py-8 oe-scroll">
@@ -54,7 +55,12 @@ import EditorToolbar from '~/components/editor/Toolbar.vue'
 import EditorCanvasSurface from '~/components/editor/CanvasSurface.vue'
 import { getDocument, renameDocument } from '~/lib/api/documents'
 import { isNotFound, isUnauthorized } from '~/lib/api/client'
-import { EMPTY_FORMAT_STATE, type FormatKey, type FormatState } from '~/lib/editor/richText'
+import {
+  EMPTY_FORMAT_STATE,
+  type FormatKey,
+  type FormatState,
+  type ParagraphStyle,
+} from '~/lib/editor/richText'
 
 const route = useRoute()
 const docId = computed(() => (route.params.id as string) || 'untitled')
@@ -85,6 +91,10 @@ onMounted(async () => {
 
 function handleFormat(key: FormatKey) {
   canvasRef.value?.toggleMark(key)
+}
+
+function handleParagraph(style: ParagraphStyle) {
+  canvasRef.value?.setParagraphStyle(style)
 }
 
 async function handleRename(title: string) {

@@ -88,6 +88,24 @@ impl EngineCore {
             .map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
+    /// Apply a string mark on a Unicode range.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the range is invalid.
+    #[wasm_bindgen]
+    pub fn set_mark_value(
+        &mut self,
+        start: usize,
+        end: usize,
+        key: &str,
+        value: &str,
+    ) -> Result<(), JsValue> {
+        self.doc
+            .set_mark_value(start, end, key, value)
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
     /// Return the rich-text delta as JSON.
     ///
     /// # Errors

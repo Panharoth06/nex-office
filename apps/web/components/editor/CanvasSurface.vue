@@ -126,6 +126,7 @@ const {
   selectionStart,
   selectionEnd,
   currentFormatState,
+  setParagraphStyle,
   insertText,
   clampSelection,
   toggleMark,
@@ -259,7 +260,6 @@ function redraw() {
     selectionStart: selectionStart.value,
     selectionEnd: selectionEnd.value,
     margin,
-    lineHeight,
   })
 
   updateCaret()
@@ -268,7 +268,7 @@ function redraw() {
 
 function updateCaret() {
   if (!docCtx) return
-  caret.value = caretRect(docCtx, lines.value, caretIndex.value, margin, lineHeight)
+  caret.value = caretRect(docCtx, lines.value, caretIndex.value, margin)
   emitFormatState()
 }
 
@@ -326,5 +326,5 @@ function onComposition(text: string, isEnd: boolean) {
   if (text) onTextInput(text)
 }
 
-defineExpose({ toggleMark })
+defineExpose({ toggleMark, setParagraphStyle })
 </script>

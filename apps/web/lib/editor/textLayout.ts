@@ -1,7 +1,10 @@
+export type ParagraphStyle = 'normal' | 'h1' | 'h2' | 'h3'
+
 export interface TextStyle {
   bold?: boolean
   italic?: boolean
   underline?: boolean
+  paragraph?: ParagraphStyle
 }
 
 export interface StyledChar {
@@ -17,6 +20,8 @@ export interface LineBox {
   end: number
   /** Absolute y within the stacked page canvas. */
   y: number
+  /** Height of this line, which varies for headings. */
+  height: number
   page: number
 }
 
@@ -36,11 +41,44 @@ export interface CaretRect {
 export const DOC_FONT_FAMILY =
   '"Helvetica Neue", Arial, "Noto Sans CJK SC", "Noto Sans", sans-serif'
 
+/** Font size for a paragraph style. */
+export function fontSizeForStyle(style: TextStyle): number {
+  switch (style.paragraph) {
+    case 'h1':
+      return 32
+    case 'h2':
+      return 24
+    case 'h3':
+      return 20
+    default:
+      return 16
+  }
+}
+
+/** Line height for a paragraph style. */
+export function lineHeightForStyle(style: TextStyle): number {
+  switch (style.paragraph) {
+    case 'h1':
+      return 44
+    case 'h2':
+      return 34
+    case 'h3':
+      return 28
+    default:
+      return 24
+  }
+}
+
 /** Build a canvas font string for a rich-text style. */
-export function fontForStyle(style: TextStyle, size = 16): string {
+export function fontForStyle(
+  style: TextStyle,
+  size = fontSizeForStyle(style),
+): string {
   const parts: string[] = []
   if (style.italic) parts.push('italic')
-  if (style.bold) parts.push('bold')
+  if (style.bold || (style.paragraph && style.paragraph !== 'normal')) {
+    parts.push('bold')
+  }
   parts.push(`${size}px`, DOC_FONT_FAMILY)
   return parts.join(' ')
 }
@@ -79,6 +117,7 @@ export function layoutChars(
   let width = 0
   let pageIndex = 0
   let y = top
+  let currentHeight = lineHeight
   const stride = page ? page.pageHeight + page.pageGap : 0
 
   const pushLine = () => {
@@ -88,9 +127,11 @@ export function layoutChars(
       start: lineStart,
       end: lineStart + lineChars.length,
       y,
+      height: currentHeight,
       page: pageIndex,
     })
-    y += lineHeight
+    y += currentHeight
+    currentHeight = lineHeight
     lineChars = []
     lineXs = [0]
     width = 0
@@ -122,6 +163,16 @@ export function layoutChars(
       lineStart = index
     }
 
+    const styleHeight = lineHeightForStyle(item.style)
+    if (lineChars.length === 0 && page) {
+      const bottom = pageIndex * stride + page.pageHeight - page.marginBottom
+      if (y + Math.max(lineHeight, styleHeight) > bottom) {
+        pageIndex += 1
+        y = pageIndex * stride + page.marginTop
+      }
+    }
+    currentHeight = Math.max(currentHeight, styleHeight)
+
     lineChars.push(item)
     lineXs.push(lineXs[lineXs.length - 1] + charWidth)
     width += charWidth
@@ -137,7 +188,6 @@ export function caretRect(
   lines: LineBox[],
   index: number,
   left: number,
-  lineHeight: number,
 ): CaretRect {
   const line = lineForIndex(lines, index)
   const offset = Math.min(Math.max(index - line.start, 0), line.chars.length)
@@ -145,7 +195,7 @@ export function caretRect(
   return {
     x: left + (line.xs[offset] ?? 0),
     y: line.y,
-    height: lineHeight,
+    height: line.height,
   }
 }
 
@@ -155,9 +205,8 @@ export function hitTestChar(
   x: number,
   y: number,
   left: number,
-  lineHeight: number,
 ): number {
-  const line = lineForY(lines, y, lineHeight)
+  const line = lineForY(lines, y)
 
   if (x <= left || line.chars.length === 0) {
     return line.start
@@ -181,9 +230,9 @@ export function lineForIndex(lines: LineBox[], index: number): LineBox {
   )
 }
 
-function lineForY(lines: LineBox[], y: number, lineHeight: number): LineBox {
+function lineForY(lines: LineBox[], y: number): LineBox {
   return (
-    lines.find((line) => y >= line.y && y < line.y + lineHeight) ??
+    lines.find((line) => y >= line.y && y < line.y + line.height) ??
     (y < lines[0].y ? lines[0] : lines[lines.length - 1])
   )
 }

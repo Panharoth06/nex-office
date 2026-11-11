@@ -1,4 +1,6 @@
-use loro::{ExportMode, LoroDoc, LoroEncodeError, LoroResult};
+use loro::{
+    ExpandType, ExportMode, LoroDoc, LoroEncodeError, LoroResult, StyleConfig, StyleConfigMap,
+};
 
 /// Thin wrapper around a Loro document that owns the `document_text` container.
 pub struct DocumentModel {
@@ -13,9 +15,17 @@ impl Default for DocumentModel {
 impl DocumentModel {
     /// Create an empty Loro document.
     pub fn new() -> Self {
-        Self {
-            loro: LoroDoc::new(),
-        }
+        let loro = LoroDoc::new();
+        let mut styles = StyleConfigMap::default_rich_text_config();
+        styles.insert(
+            "paragraph".into(),
+            StyleConfig {
+                expand: ExpandType::After,
+            },
+        );
+        loro.config_text_style(styles);
+
+        Self { loro }
     }
 
     /// Insert `text` at character offset `pos`.
@@ -64,6 +74,26 @@ impl DocumentModel {
         } else {
             text_container.unmark(start..end, key)
         }
+    }
+
+    /// Apply a string mark (for example a paragraph style) on a Unicode range.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`loro::LoroError`] when the range is out of bounds.
+    pub fn set_mark_value(
+        &self,
+        start: usize,
+        end: usize,
+        key: &str,
+        value: &str,
+    ) -> LoroResult<()> {
+        if start >= end {
+            return Ok(());
+        }
+
+        let text_container = self.loro.get_text("document_text");
+        text_container.mark(start..end, key, value.to_string())
     }
 
     /// Return the rich-text delta as JSON.
@@ -166,6 +196,20 @@ mod tests {
                 .expect("delta should be valid JSON");
 
         assert!(delta[0]["attributes"].get("bold").is_none());
+    }
+
+    #[test]
+    fn string_marks_are_reflected_in_the_delta() {
+        let mut doc = DocumentModel::new();
+        doc.insert(0, "Heading").expect("insert should succeed");
+        doc.set_mark_value(0, 7, "paragraph", "h1")
+            .expect("mark should succeed");
+
+        let delta: serde_json::Value =
+            serde_json::from_str(&doc.delta_json().expect("delta should serialize"))
+                .expect("delta should be valid JSON");
+
+        assert_eq!(delta[0]["attributes"]["paragraph"], "h1");
     }
 
     #[test]

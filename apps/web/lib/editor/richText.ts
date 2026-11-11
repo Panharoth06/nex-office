@@ -1,4 +1,6 @@
-import type { StyledChar, TextStyle } from './textLayout'
+import type { ParagraphStyle, StyledChar, TextStyle } from './textLayout'
+
+export type { ParagraphStyle }
 
 export interface TextDeltaSegment {
   insert?: string
@@ -11,14 +13,23 @@ export interface FormatState {
   bold: boolean
   italic: boolean
   underline: boolean
+  paragraph: ParagraphStyle
 }
 
-export type FormatKey = keyof FormatState
+export type FormatKey = 'bold' | 'italic' | 'underline'
 
 export const EMPTY_FORMAT_STATE: FormatState = {
   bold: false,
   italic: false,
   underline: false,
+  paragraph: 'normal',
+}
+
+export function paragraphStyleFromAttributes(
+  attributes?: Record<string, unknown> | null,
+): ParagraphStyle {
+  const value = attributes?.paragraph
+  return value === 'h1' || value === 'h2' || value === 'h3' ? value : 'normal'
 }
 
 export function styleFromAttributes(
@@ -28,6 +39,7 @@ export function styleFromAttributes(
     bold: attributes?.bold === true,
     italic: attributes?.italic === true,
     underline: attributes?.underline === true,
+    paragraph: paragraphStyleFromAttributes(attributes),
   }
 }
 
@@ -76,10 +88,15 @@ export function formatStateForRange(
   const chars = styledCharsFromDelta(delta).slice(start, end)
   if (chars.length === 0) return { ...EMPTY_FORMAT_STATE }
 
+  const paragraph = chars[0].style.paragraph ?? 'normal'
+
   return {
     bold: chars.every((item) => item.style.bold),
     italic: chars.every((item) => item.style.italic),
     underline: chars.every((item) => item.style.underline),
+    paragraph: chars.every((item) => (item.style.paragraph ?? 'normal') === paragraph)
+      ? paragraph
+      : 'normal',
   }
 }
 
@@ -88,5 +105,6 @@ function styleToFormatState(style: TextStyle): FormatState {
     bold: style.bold === true,
     italic: style.italic === true,
     underline: style.underline === true,
+    paragraph: style.paragraph ?? 'normal',
   }
 }

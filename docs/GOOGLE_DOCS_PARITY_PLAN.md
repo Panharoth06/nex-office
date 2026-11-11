@@ -96,11 +96,13 @@ repository is not. Implement our own code and tests after studying it.
 - [x] Rich-text marks (bold/italic/underline), selection, and toolbar wiring
       (first slice).
 - [x] Multi-page A4 pagination and page numbers.
+- [x] Paragraph styles (Normal / H1–H3) stored as CRDT marks with variable
+      line heights.
+- [ ] Lists, alignment, spacing, and block commands.
 - [ ] Headers and footers.
-- [ ] Loro block model (paragraphs, headings, lists) and block commands.
 - [ ] Paint-command IR + CanvasKit renderer.
-- [ ] Selection, caret, R-tree hit-testing.
-- [ ] Formatting, lists, links, images, basic tables.
+- [ ] R-tree hit-testing for large documents.
+- [ ] Links, images, basic tables.
 - [ ] Gate: formatted multi-page document edits at 60 FPS.
 
 ### Phase 2 — Collaboration
