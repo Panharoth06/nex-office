@@ -100,9 +100,12 @@ repository is not. Implement our own code and tests after studying it.
       line heights.
 - [x] Bullet and numbered lists with nested levels, list-aware Enter/Tab/
       Backspace behavior, and left/center/right paragraph alignment.
+- [x] Headers and footers linked across pages, with editable rich text,
+      formatting, caret/selection routing, and body margin growth.
+- [ ] Different first-page/odd-even headers, page-number fields, and
+      section-specific headers/footers.
 - [ ] Paragraph spacing, indentation outside lists, justified alignment, and
       further block commands.
-- [ ] Headers and footers.
 - [ ] Paint-command IR + CanvasKit renderer.
 - [ ] R-tree hit-testing for large documents.
 - [ ] Links, images, basic tables.
@@ -112,8 +115,14 @@ Block attributes (`paragraph`, `list`, `list_level`, `align`) are stored as
 Loro text marks on the paragraph text and on the newline before the paragraph.
 The leading newline describes the paragraph that follows it, which lets empty
 list items and trailing paragraphs survive reloads. This remains an interim
-mark-based block model until headers/footers force a shared document-zone
-refactor.
+mark-based block model within each text zone.
+
+Headers and footers use separate Loro text containers (`header_text` and
+`footer_text`) with the same mark schema. Content is linked across pages, while
+each page reserves layout space and grows the body margins when a zone exceeds
+the paper margin. Header/footer zones are currently always available through
+page placeholders; first-page/odd-even variants and page-number fields are
+deferred.
 
 ### Phase 2 — Collaboration
 - Loro relay, Redis pub/sub, presence, snapshot flush, reconnect.

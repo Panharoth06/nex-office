@@ -16,6 +16,11 @@ pub fn init_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
+fn parse_zone(zone: &str) -> Result<document::TextZone, JsValue> {
+    document::TextZone::parse(zone)
+        .ok_or_else(|| JsValue::from_str(&format!("unknown text zone: {zone}")))
+}
+
 /// Document state exposed to JavaScript.
 #[wasm_bindgen]
 pub struct EngineCore {
@@ -115,6 +120,107 @@ impl EngineCore {
     pub fn get_delta(&self) -> Result<String, JsValue> {
         self.doc
             .delta_json()
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Insert `text` into a named zone (`body`, `header`, or `footer`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone is unknown or the CRDT rejects
+    /// the operation.
+    #[wasm_bindgen]
+    pub fn insert_text_in_zone(
+        &mut self,
+        pos: usize,
+        text: &str,
+        zone: &str,
+    ) -> Result<(), JsValue> {
+        let zone = parse_zone(zone)?;
+        self.doc
+            .insert_in_zone(zone, pos, text)
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Delete `len` characters from a named zone.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone is unknown or the range is
+    /// invalid.
+    #[wasm_bindgen]
+    pub fn delete_range_in_zone(
+        &mut self,
+        pos: usize,
+        len: usize,
+        zone: &str,
+    ) -> Result<(), JsValue> {
+        let zone = parse_zone(zone)?;
+        self.doc
+            .delete_in_zone(zone, pos, len)
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Return a named zone's plain text.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone is unknown.
+    #[wasm_bindgen]
+    pub fn get_text_in_zone(&self, zone: &str) -> Result<String, JsValue> {
+        Ok(self.doc.get_text_in_zone(parse_zone(zone)?))
+    }
+
+    /// Apply or remove a boolean mark on a named zone range.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone or range is invalid.
+    #[wasm_bindgen]
+    pub fn set_mark_in_zone(
+        &mut self,
+        start: usize,
+        end: usize,
+        key: &str,
+        enabled: bool,
+        zone: &str,
+    ) -> Result<(), JsValue> {
+        let zone = parse_zone(zone)?;
+        self.doc
+            .set_mark_in_zone(zone, start, end, key, enabled)
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Apply a string mark on a named zone range.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone or range is invalid.
+    #[wasm_bindgen]
+    pub fn set_mark_value_in_zone(
+        &mut self,
+        start: usize,
+        end: usize,
+        key: &str,
+        value: &str,
+        zone: &str,
+    ) -> Result<(), JsValue> {
+        let zone = parse_zone(zone)?;
+        self.doc
+            .set_mark_value_in_zone(zone, start, end, key, value)
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Return a named zone's rich-text delta as JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the zone is unknown or the delta cannot
+    /// be serialized.
+    #[wasm_bindgen]
+    pub fn get_delta_in_zone(&self, zone: &str) -> Result<String, JsValue> {
+        self.doc
+            .delta_json_in_zone(parse_zone(zone)?)
             .map_err(|err| JsValue::from_str(&err.to_string()))
     }
 

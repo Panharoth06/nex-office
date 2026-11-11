@@ -3,6 +3,8 @@ export interface PageFrame {
   pageHeight: number
   margin: number
   contentWidth: number
+  contentTop: number
+  contentBottom: number
   pageCount: number
   pageGap: number
 }
@@ -21,7 +23,16 @@ export function setupCanvas(canvas: HTMLCanvasElement, dpr: number): CanvasRende
 
 /** Paint stacked paper pages, margin guides, and page numbers. */
 export function drawPageBackground(ctx: CanvasRenderingContext2D, frame: PageFrame): void {
-  const { pageWidth, pageHeight, margin, contentWidth, pageCount, pageGap } = frame
+  const {
+    pageWidth,
+    pageHeight,
+    margin,
+    contentWidth,
+    contentTop,
+    contentBottom,
+    pageCount,
+    pageGap,
+  } = frame
   const stride = pageHeight + pageGap
   const totalHeight = pageCount * pageHeight + (pageCount - 1) * pageGap
 
@@ -41,7 +52,12 @@ export function drawPageBackground(ctx: CanvasRenderingContext2D, frame: PageFra
 
     ctx.strokeStyle = '#e2e8f0'
     ctx.setLineDash([4, 4])
-    ctx.strokeRect(margin, top + margin, contentWidth, pageHeight - margin * 2)
+    ctx.strokeRect(
+      margin,
+      top + contentTop,
+      contentWidth,
+      pageHeight - contentTop - contentBottom,
+    )
     ctx.setLineDash([])
 
     ctx.fillStyle = '#94a3b8'

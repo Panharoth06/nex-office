@@ -112,7 +112,8 @@ M2.5 Typing Slice     ──► M3  Real-Time Sync    ──► M4  Product Engi
 
 ### Docs
 
-- [ ] Flow layout, A4 pagination, headers/footers, sections.
+- [x] Flow layout, A4 pagination, linked headers/footers.
+- [ ] Sections, first-page/odd-even headers, page-number fields.
 - [ ] Rich text, styles, lists, tables, images, footnotes.
 - [ ] Hidden input proxy with CJK/Vietnamese IME.
 - [ ] 3-tier canvas and R-tree hit-testing.

@@ -1,24 +1,49 @@
 import type { FormatKey, TextDeltaSegment } from './richText'
+import type { EditorZone } from './zones'
 
 export interface TextEngine {
-  insertText(pos: number, text: string): void
-  deleteRange(pos: number, len: number): void
-  getText(): string
-  setMark(start: number, end: number, key: FormatKey, enabled: boolean): void
-  clearMark(start: number, end: number, key: string): void
-  setMarkValue(start: number, end: number, key: string, value: string): void
-  getDelta(): TextDeltaSegment[]
+  insertText(pos: number, text: string, zone?: EditorZone): void
+  deleteRange(pos: number, len: number, zone?: EditorZone): void
+  getText(zone?: EditorZone): string
+  setMark(
+    start: number,
+    end: number,
+    key: FormatKey,
+    enabled: boolean,
+    zone?: EditorZone,
+  ): void
+  clearMark(start: number, end: number, key: string, zone?: EditorZone): void
+  setMarkValue(
+    start: number,
+    end: number,
+    key: string,
+    value: string,
+    zone?: EditorZone,
+  ): void
+  getDelta(zone?: EditorZone): TextDeltaSegment[]
   exportSnapshot(): Uint8Array
   importSnapshot(bytes: Uint8Array): void
 }
 
 interface WasmEngineCore {
-  insert_text(pos: number, text: string): void
-  delete_range(pos: number, len: number): void
-  get_text(): string
-  set_mark(start: number, end: number, key: string, enabled: boolean): void
-  set_mark_value(start: number, end: number, key: string, value: string): void
-  get_delta(): string
+  insert_text_in_zone(pos: number, text: string, zone: string): void
+  delete_range_in_zone(pos: number, len: number, zone: string): void
+  get_text_in_zone(zone: string): string
+  set_mark_in_zone(
+    start: number,
+    end: number,
+    key: string,
+    enabled: boolean,
+    zone: string,
+  ): void
+  set_mark_value_in_zone(
+    start: number,
+    end: number,
+    key: string,
+    value: string,
+    zone: string,
+  ): void
+  get_delta_in_zone(zone: string): string
   export_snapshot(): Uint8Array
   import_snapshot(bytes: Uint8Array): void
 }
@@ -51,20 +76,42 @@ export async function loadEngine(): Promise<TextEngine> {
   const core = new module.EngineCore()
 
   return {
-    insertText: (pos, text) => core.insert_text(pos, text),
-    deleteRange: (pos, len) => core.delete_range(pos, len),
-    getText: () => core.get_text(),
-    setMark: (start, end, key, enabled) => core.set_mark(start, end, key, enabled),
-    clearMark: (start, end, key) => core.set_mark(start, end, key, false),
-    setMarkValue: (start, end, key, value) => core.set_mark_value(start, end, key, value),
-    getDelta: () => {
+    insertText: (pos, text, zone = 'body') =>
+      core.insert_text_in_zone(pos, text, zone),
+    deleteRange: (pos, len, zone = 'body') =>
+      core.delete_range_in_zone(pos, len, zone),
+    getText: (zone = 'body') => core.get_text_in_zone(zone),
+    setMark: (start, end, key, enabled, zone = 'body') =>
+      core.set_mark_in_zone(start, end, key, enabled, zone),
+    clearMark: (start, end, key, zone = 'body') =>
+      core.set_mark_in_zone(start, end, key, false, zone),
+    setMarkValue: (start, end, key, value, zone = 'body') =>
+      core.set_mark_value_in_zone(start, end, key, value, zone),
+    getDelta: (zone = 'body') => {
       try {
-        return JSON.parse(core.get_delta()) as TextDeltaSegment[]
+        return JSON.parse(core.get_delta_in_zone(zone)) as TextDeltaSegment[]
       } catch {
         return []
       }
     },
     exportSnapshot: () => core.export_snapshot(),
     importSnapshot: (bytes) => core.import_snapshot(bytes),
+  }
+}
+
+/** Bind every text operation to one document zone. */
+export function engineForZone(engine: TextEngine, zone: EditorZone): TextEngine {
+  return {
+    insertText: (pos, text) => engine.insertText(pos, text, zone),
+    deleteRange: (pos, len) => engine.deleteRange(pos, len, zone),
+    getText: () => engine.getText(zone),
+    setMark: (start, end, key, enabled) =>
+      engine.setMark(start, end, key, enabled, zone),
+    clearMark: (start, end, key) => engine.clearMark(start, end, key, zone),
+    setMarkValue: (start, end, key, value) =>
+      engine.setMarkValue(start, end, key, value, zone),
+    getDelta: () => engine.getDelta(zone),
+    exportSnapshot: () => engine.exportSnapshot(),
+    importSnapshot: (bytes) => engine.importSnapshot(bytes),
   }
 }
