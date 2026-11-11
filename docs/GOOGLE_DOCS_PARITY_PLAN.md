@@ -95,8 +95,9 @@ repository is not. Implement our own code and tests after studying it.
 ### Phase 1 — Docs engine
 - [x] Rich-text marks (bold/italic/underline), selection, and toolbar wiring
       (first slice).
+- [x] Multi-page A4 pagination and page numbers.
+- [ ] Headers and footers.
 - [ ] Loro block model (paragraphs, headings, lists) and block commands.
-- [ ] Multi-page A4 pagination, headers/footers, page numbers.
 - [ ] Paint-command IR + CanvasKit renderer.
 - [ ] Selection, caret, R-tree hit-testing.
 - [ ] Formatting, lists, links, images, basic tables.

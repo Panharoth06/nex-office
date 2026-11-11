@@ -4,7 +4,7 @@
 
 ---
 
-**Status:** M0 complete; M1 authentication, the M2.5 typing slice, the Phase 0 document spine, and the first Phase 1 rich-text slice (bold/italic/underline + selection) are implemented. The feature lists below are the product contract and target scope, not a claim of shipped functionality. See `ROADMAP.md` and `docs/GOOGLE_DOCS_PARITY_PLAN.md` for milestones.
+**Status:** M0 complete; M1 authentication, the M2.5 typing slice, the Phase 0 document spine, and the first Phase 1 slices (rich-text marks, selection, and multi-page A4 pagination) are implemented. The feature lists below are the product contract and target scope, not a claim of shipped functionality. See `ROADMAP.md` and `docs/GOOGLE_DOCS_PARITY_PLAN.md` for milestones.
 
 ---
 

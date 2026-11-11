@@ -15,7 +15,16 @@ export interface LineBox {
   xs: number[]
   start: number
   end: number
+  /** Absolute y within the stacked page canvas. */
   y: number
+  page: number
+}
+
+export interface PageLayout {
+  pageHeight: number
+  marginTop: number
+  marginBottom: number
+  pageGap: number
 }
 
 export interface CaretRect {
@@ -61,13 +70,16 @@ export function layoutChars(
   maxWidth: number,
   lineHeight: number,
   top: number,
+  page?: PageLayout,
 ): LineBox[] {
   const lines: LineBox[] = []
   let lineChars: StyledChar[] = []
   let lineXs: number[] = [0]
   let lineStart = 0
   let width = 0
+  let pageIndex = 0
   let y = top
+  const stride = page ? page.pageHeight + page.pageGap : 0
 
   const pushLine = () => {
     lines.push({
@@ -76,11 +88,22 @@ export function layoutChars(
       start: lineStart,
       end: lineStart + lineChars.length,
       y,
+      page: pageIndex,
     })
     y += lineHeight
     lineChars = []
     lineXs = [0]
     width = 0
+    ensureSpace()
+  }
+
+  const ensureSpace = () => {
+    if (!page) return
+    const bottom = pageIndex * stride + page.pageHeight - page.marginBottom
+    if (y + lineHeight > bottom) {
+      pageIndex += 1
+      y = pageIndex * stride + page.marginTop
+    }
   }
 
   for (let index = 0; index < chars.length; index++) {

@@ -3,35 +3,30 @@
     <div
       ref="pageRef"
       data-testid="editor-page"
-      class="relative shrink-0 bg-white shadow-md border border-slate-200 cursor-text"
-      :style="{ width: `${pageWidth}px`, height: `${pageHeight}px` }"
+      class="relative shrink-0 cursor-text"
+      :style="{ width: `${pageWidth}px`, height: `${totalHeight}px` }"
       @mousedown="handleMouseDown"
+      @mousemove="handleMouseMove"
     >
       <!-- Layer 1: static paper and margin guides -->
       <canvas
         ref="bgCanvas"
         class="absolute inset-0 pointer-events-none"
-        :width="pageWidth * dpr"
-        :height="pageHeight * dpr"
-        :style="{ width: `${pageWidth}px`, height: `${pageHeight}px` }"
+        :style="{ width: `${pageWidth}px`, height: `${totalHeight}px` }"
       ></canvas>
 
       <!-- Layer 2: document text -->
       <canvas
         ref="docCanvas"
         class="absolute inset-0 pointer-events-none"
-        :width="pageWidth * dpr"
-        :height="pageHeight * dpr"
-        :style="{ width: `${pageWidth}px`, height: `${pageHeight}px` }"
+        :style="{ width: `${pageWidth}px`, height: `${totalHeight}px` }"
       ></canvas>
 
       <!-- Layer 3: caret and IME preview -->
       <canvas
         ref="overlayCanvas"
         class="absolute inset-0 pointer-events-none"
-        :width="pageWidth * dpr"
-        :height="pageHeight * dpr"
-        :style="{ width: `${pageWidth}px`, height: `${pageHeight}px` }"
+        :style="{ width: `${pageWidth}px`, height: `${totalHeight}px` }"
       ></canvas>
 
       <!-- IME and keyboard proxy, positioned under the active caret -->
@@ -68,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import EditorHiddenInput from './HiddenInput.vue'
 import { layoutChars, caretRect, hitTestChar, lineForIndex, type LineBox } from '~/lib/editor/textLayout'
 import { drawPageBackground, setupCanvas } from '~/lib/editor/canvas'
@@ -90,6 +85,7 @@ const emit = defineEmits<{
 
 const pageWidth = 794
 const pageHeight = 1123
+const pageGap = 32
 const margin = 96
 const lineHeight = 24
 const font = '16px "Helvetica Neue", Arial, "Noto Sans CJK SC", "Noto Sans", sans-serif'
@@ -110,6 +106,10 @@ const composing = ref('')
 const mirrorText = ref('')
 const ready = ref(false)
 const error = ref<string | null>(null)
+const pageCount = ref(1)
+const totalHeight = computed(
+  () => pageCount.value * pageHeight + (pageCount.value - 1) * pageGap,
+)
 const {
   label: saveLabel,
   load: loadSnapshot,
@@ -157,16 +157,10 @@ let blinkTimer: number | undefined
 let caretVisible = true
 
 onMounted(async () => {
-  const bg = bgCanvas.value
-  const doc = docCanvas.value
-  const overlay = overlayCanvas.value
-  if (!bg || !doc || !overlay) return
+  if (!bgCanvas.value || !docCanvas.value || !overlayCanvas.value) return
 
-  setupCanvas(bg, dpr)
-  docCtx = setupCanvas(doc, dpr)
-  overlayCtx = setupCanvas(overlay, dpr)
-
-  drawPageBackground(bg.getContext('2d')!, { pageWidth, pageHeight, margin, contentWidth })
+  applyCanvasSize()
+  drawBackground()
 
   try {
     engine.value = await loadEngine()
@@ -198,6 +192,34 @@ onBeforeUnmount(() => {
   disposeSnapshotSaver()
 })
 
+function applyCanvasSize() {
+  const canvases = [bgCanvas.value, docCanvas.value, overlayCanvas.value]
+  for (const canvas of canvases) {
+    if (!canvas) return
+    canvas.width = pageWidth * dpr
+    canvas.height = totalHeight.value * dpr
+    canvas.style.width = `${pageWidth}px`
+    canvas.style.height = `${totalHeight.value}px`
+  }
+
+  if (bgCanvas.value) setupCanvas(bgCanvas.value, dpr)
+  if (docCanvas.value) docCtx = setupCanvas(docCanvas.value, dpr)
+  if (overlayCanvas.value) overlayCtx = setupCanvas(overlayCanvas.value, dpr)
+}
+
+function drawBackground() {
+  const canvas = bgCanvas.value
+  if (!canvas) return
+  drawPageBackground(canvas.getContext('2d')!, {
+    pageWidth,
+    pageHeight,
+    margin,
+    contentWidth,
+    pageCount: pageCount.value,
+    pageGap,
+  })
+}
+
 function redraw() {
   if (!docCtx || !engine.value) return
 
@@ -212,11 +234,27 @@ function redraw() {
   mirrorText.value = text
   composing.value = ''
 
-  docCtx.clearRect(0, 0, pageWidth, pageHeight)
+  const nextLines = layoutChars(docCtx, chars, contentWidth, lineHeight, margin, {
+    pageHeight,
+    marginTop: margin,
+    marginBottom: margin,
+    pageGap,
+  })
+  const nextPageCount = nextLines.length
+    ? nextLines[nextLines.length - 1].page + 1
+    : 1
+
+  if (nextPageCount !== pageCount.value) {
+    pageCount.value = nextPageCount
+    applyCanvasSize()
+    drawBackground()
+  }
+
+  docCtx.clearRect(0, 0, pageWidth, totalHeight.value)
   docCtx.textBaseline = 'top'
   docCtx.textAlign = 'left'
 
-  lines.value = layoutChars(docCtx, chars, contentWidth, lineHeight, margin)
+  lines.value = nextLines
   drawRichDocument(docCtx, lines.value, {
     selectionStart: selectionStart.value,
     selectionEnd: selectionEnd.value,
@@ -237,7 +275,7 @@ function updateCaret() {
 function drawOverlay() {
   if (!overlayCtx) return
 
-  overlayCtx.clearRect(0, 0, pageWidth, pageHeight)
+  overlayCtx.clearRect(0, 0, pageWidth, totalHeight.value)
 
   if (ready.value && caretVisible) {
     overlayCtx.fillStyle = '#2563eb'
