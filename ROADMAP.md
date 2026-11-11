@@ -113,6 +113,7 @@ M2.5 Typing Slice     ──► M3  Real-Time Sync    ──► M4  Product Engi
 ### Docs
 
 - [x] Flow layout, A4 pagination, linked headers/footers.
+- [x] Undo/redo with grouped typing history and zone-wide operations.
 - [ ] Sections, first-page/odd-even headers, page-number fields.
 - [ ] Rich text, styles, lists, tables, images, footnotes.
 - [ ] Hidden input proxy with CJK/Vietnamese IME.

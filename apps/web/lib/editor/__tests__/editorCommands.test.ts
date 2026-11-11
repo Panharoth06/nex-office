@@ -86,6 +86,24 @@ class FakeEngine implements TextEngine {
   importSnapshot(): void {
     throw new Error('not implemented')
   }
+
+  undo(): boolean {
+    return false
+  }
+
+  redo(): boolean {
+    return false
+  }
+
+  canUndo(): boolean {
+    return false
+  }
+
+  canRedo(): boolean {
+    return false
+  }
+
+  checkpoint(): void {}
 }
 
 describe('editorCommands block editing', () => {

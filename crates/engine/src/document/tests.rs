@@ -230,3 +230,90 @@ fn text_zone_parses_public_identifiers() {
     assert_eq!(TextZone::parse("footer"), Some(TextZone::Footer));
     assert_eq!(TextZone::parse("sidebar"), None);
 }
+
+#[test]
+fn undo_and_redo_restore_text() {
+    let mut doc = DocumentModel::new();
+    assert!(!doc.can_undo());
+    doc.insert(0, "hello").expect("insert should succeed");
+    doc.record_checkpoint().expect("checkpoint should succeed");
+    assert!(doc.can_undo());
+
+    assert!(doc.undo().expect("undo should succeed"));
+    assert_eq!(doc.get_text(), "");
+    assert!(doc.can_redo());
+
+    assert!(doc.redo().expect("redo should succeed"));
+    assert_eq!(doc.get_text(), "hello");
+}
+
+#[test]
+fn undo_checkpoints_pending_edits() {
+    let mut doc = DocumentModel::new();
+    doc.insert(0, "hello").expect("insert should succeed");
+
+    assert!(doc.undo().expect("undo should succeed"));
+    assert_eq!(doc.get_text(), "");
+}
+
+#[test]
+fn checkpoints_split_undo_steps() {
+    let mut doc = DocumentModel::new();
+    doc.insert(0, "a").expect("insert should succeed");
+    doc.record_checkpoint().expect("checkpoint should succeed");
+    doc.insert(1, "b").expect("insert should succeed");
+
+    doc.undo().expect("undo should succeed");
+    assert_eq!(doc.get_text(), "a");
+    doc.undo().expect("undo should succeed");
+    assert_eq!(doc.get_text(), "");
+}
+
+#[test]
+fn undo_restores_marks() {
+    let mut doc = DocumentModel::new();
+    doc.insert(0, "hello").expect("insert should succeed");
+    doc.record_checkpoint().expect("checkpoint should succeed");
+    doc.set_mark(0, 5, "bold", true)
+        .expect("mark should succeed");
+
+    doc.undo().expect("undo should succeed");
+    let delta: serde_json::Value =
+        serde_json::from_str(&doc.delta_json().expect("delta should serialize"))
+            .expect("delta should be valid JSON");
+    assert!(delta[0]["attributes"].get("bold").is_none());
+    assert_eq!(doc.get_text(), "hello");
+
+    doc.redo().expect("redo should succeed");
+    let delta: serde_json::Value =
+        serde_json::from_str(&doc.delta_json().expect("delta should serialize"))
+            .expect("delta should be valid JSON");
+    assert_eq!(delta[0]["attributes"]["bold"], true);
+}
+
+#[test]
+fn undo_spans_zones() {
+    let mut doc = DocumentModel::new();
+    doc.insert(0, "Body").expect("body insert should succeed");
+    doc.record_checkpoint().expect("checkpoint should succeed");
+    doc.insert_in_zone(TextZone::Header, 0, "Header")
+        .expect("header insert should succeed");
+
+    doc.undo().expect("undo should succeed");
+    assert_eq!(doc.get_text(), "Body");
+    assert_eq!(doc.get_text_in_zone(TextZone::Header), "");
+}
+
+#[test]
+fn importing_a_snapshot_clears_history() {
+    let mut doc = DocumentModel::new();
+    doc.insert(0, "hello").expect("insert should succeed");
+    let snapshot = doc.export_snapshot().expect("snapshot should export");
+
+    let mut restored = DocumentModel::new();
+    restored
+        .import_snapshot(&snapshot)
+        .expect("snapshot should import");
+    assert!(!restored.can_undo());
+    assert!(!restored.can_redo());
+}

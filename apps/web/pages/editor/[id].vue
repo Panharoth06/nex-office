@@ -4,7 +4,11 @@
       :title="documentTitle"
       :doc-id="docId"
       :format-state="formatState"
+      :can-undo="historyState.canUndo"
+      :can-redo="historyState.canRedo"
       @rename="handleRename"
+      @undo="handleUndo"
+      @redo="handleRedo"
       @format="handleFormat"
       @paragraph="handleParagraph"
       @list="handleList"
@@ -32,6 +36,7 @@
           ref="canvasRef"
           :doc-id="docId"
           @format-state="formatState = $event"
+          @history-state="historyState = $event"
         />
         <template #fallback>
           <div class="flex h-full items-center justify-center text-sm text-slate-400">
@@ -71,6 +76,7 @@ const docId = computed(() => (route.params.id as string) || 'untitled')
 
 const documentTitle = ref('Untitled Document')
 const formatState = ref<FormatState>({ ...EMPTY_FORMAT_STATE })
+const historyState = ref({ canUndo: false, canRedo: false })
 const canvasRef = ref<InstanceType<typeof EditorCanvasSurface> | null>(null)
 const loading = ref(true)
 const loadError = ref('')
@@ -107,6 +113,14 @@ function handleList(type: ListType) {
 
 function handleAlign(align: Alignment) {
   canvasRef.value?.setAlignment(align)
+}
+
+function handleUndo() {
+  canvasRef.value?.undo()
+}
+
+function handleRedo() {
+  canvasRef.value?.redo()
 }
 
 async function handleRename(title: string) {

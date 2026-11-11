@@ -21,6 +21,11 @@ export interface TextEngine {
     zone?: EditorZone,
   ): void
   getDelta(zone?: EditorZone): TextDeltaSegment[]
+  undo(): boolean
+  redo(): boolean
+  canUndo(): boolean
+  canRedo(): boolean
+  checkpoint(): void
   exportSnapshot(): Uint8Array
   importSnapshot(bytes: Uint8Array): void
 }
@@ -44,6 +49,11 @@ interface WasmEngineCore {
     zone: string,
   ): void
   get_delta_in_zone(zone: string): string
+  undo(): boolean
+  redo(): boolean
+  can_undo(): boolean
+  can_redo(): boolean
+  record_checkpoint(): void
   export_snapshot(): Uint8Array
   import_snapshot(bytes: Uint8Array): void
 }
@@ -94,23 +104,50 @@ export async function loadEngine(): Promise<TextEngine> {
         return []
       }
     },
+    undo: () => core.undo(),
+    redo: () => core.redo(),
+    canUndo: () => core.can_undo(),
+    canRedo: () => core.can_redo(),
+    checkpoint: () => core.record_checkpoint(),
     exportSnapshot: () => core.export_snapshot(),
     importSnapshot: (bytes) => core.import_snapshot(bytes),
   }
 }
 
 /** Bind every text operation to one document zone. */
-export function engineForZone(engine: TextEngine, zone: EditorZone): TextEngine {
+export function engineForZone(
+  engine: TextEngine,
+  zone: EditorZone,
+  onEdit?: () => void,
+): TextEngine {
   return {
-    insertText: (pos, text) => engine.insertText(pos, text, zone),
-    deleteRange: (pos, len) => engine.deleteRange(pos, len, zone),
+    insertText: (pos, text) => {
+      engine.insertText(pos, text, zone)
+      onEdit?.()
+    },
+    deleteRange: (pos, len) => {
+      engine.deleteRange(pos, len, zone)
+      onEdit?.()
+    },
     getText: () => engine.getText(zone),
-    setMark: (start, end, key, enabled) =>
-      engine.setMark(start, end, key, enabled, zone),
-    clearMark: (start, end, key) => engine.clearMark(start, end, key, zone),
-    setMarkValue: (start, end, key, value) =>
-      engine.setMarkValue(start, end, key, value, zone),
+    setMark: (start, end, key, enabled) => {
+      engine.setMark(start, end, key, enabled, zone)
+      onEdit?.()
+    },
+    clearMark: (start, end, key) => {
+      engine.clearMark(start, end, key, zone)
+      onEdit?.()
+    },
+    setMarkValue: (start, end, key, value) => {
+      engine.setMarkValue(start, end, key, value, zone)
+      onEdit?.()
+    },
     getDelta: () => engine.getDelta(zone),
+    undo: () => engine.undo(),
+    redo: () => engine.redo(),
+    canUndo: () => engine.canUndo(),
+    canRedo: () => engine.canRedo(),
+    checkpoint: () => engine.checkpoint(),
     exportSnapshot: () => engine.exportSnapshot(),
     importSnapshot: (bytes) => engine.importSnapshot(bytes),
   }

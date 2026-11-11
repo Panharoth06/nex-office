@@ -4,6 +4,33 @@
     role="toolbar"
     aria-label="Text formatting"
   >
+    <UiTooltip text="Undo">
+      <UiButton
+        variant="ghost"
+        size="icon"
+        aria-label="Undo"
+        :disabled="!canUndo"
+        @mousedown.prevent
+        @click="emit('undo')"
+      >
+        <Undo2 class="h-3.5 w-3.5" aria-hidden="true" />
+      </UiButton>
+    </UiTooltip>
+    <UiTooltip text="Redo">
+      <UiButton
+        variant="ghost"
+        size="icon"
+        aria-label="Redo"
+        :disabled="!canRedo"
+        @mousedown.prevent
+        @click="emit('redo')"
+      >
+        <Redo2 class="h-3.5 w-3.5" aria-hidden="true" />
+      </UiButton>
+    </UiTooltip>
+
+    <span class="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
+
     <UiTooltip text="Bold">
       <UiButton
         variant="ghost"
@@ -137,7 +164,9 @@ import {
   Italic,
   List,
   ListOrdered,
+  Redo2,
   Underline,
+  Undo2,
 } from 'lucide-vue-next'
 import UiButton from '~/components/shared/UiButton.vue'
 import UiSelect from '~/components/shared/UiSelect.vue'
@@ -150,11 +179,21 @@ import type {
   ParagraphStyle,
 } from '~/lib/editor/richText'
 
-defineProps<{
-  formatState: FormatState
-}>()
+withDefaults(
+  defineProps<{
+    formatState: FormatState
+    canUndo?: boolean
+    canRedo?: boolean
+  }>(),
+  {
+    canUndo: false,
+    canRedo: false,
+  },
+)
 
 const emit = defineEmits<{
+  (e: 'undo'): void
+  (e: 'redo'): void
   (e: 'format', key: FormatKey): void
   (e: 'paragraph', style: ParagraphStyle): void
   (e: 'list', type: ListType): void

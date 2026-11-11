@@ -102,6 +102,8 @@ repository is not. Implement our own code and tests after studying it.
       Backspace behavior, and left/center/right paragraph alignment.
 - [x] Headers and footers linked across pages, with editable rich text,
       formatting, caret/selection routing, and body margin growth.
+- [x] Undo/redo via Loro's undo manager, with keyboard shortcuts, toolbar
+      buttons, edit-menu actions, and pause-based typing groups.
 - [ ] Different first-page/odd-even headers, page-number fields, and
       section-specific headers/footers.
 - [ ] Paragraph spacing, indentation outside lists, justified alignment, and
@@ -123,6 +125,11 @@ each page reserves layout space and grows the body margins when a zone exceeds
 the paper margin. Header/footer zones are currently always available through
 page placeholders; first-page/odd-even variants and page-number fields are
 deferred.
+
+Undo/redo uses Loro's `UndoManager` with explicit checkpoints rather than
+persisted history. Typing groups close after a short pause, and formatting,
+list, and paragraph commands close the current group before mutating. History is
+in memory and starts empty after a snapshot reload.
 
 ### Phase 2 — Collaboration
 - Loro relay, Redis pub/sub, presence, snapshot flush, reconnect.

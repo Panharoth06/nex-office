@@ -162,6 +162,7 @@ export function useEditorPainter(options: EditorPainterOptions) {
 
     updateCaret()
     markTyped()
+    options.zones().refreshHistory()
   }
 
   function drawZone(

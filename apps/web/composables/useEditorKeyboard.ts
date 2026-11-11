@@ -14,6 +14,8 @@ export interface EditorKeyboardOptions {
   insertBreak: () => void
   insertText: (text: string) => void
   changeListLevel: (delta: number) => boolean
+  undo: () => boolean
+  redo: () => boolean
   syncPending: () => void
   redraw: () => void
   scheduleSave: () => void
@@ -24,6 +26,22 @@ export function useEditorKeyboard(options: EditorKeyboardOptions) {
   function onKeydown(event: KeyboardEvent) {
     const engine = options.engine()
     if (event.isComposing || !engine) return
+
+    const modifier = event.metaKey || event.ctrlKey
+    if (modifier && !event.altKey) {
+      const key = event.key.toLowerCase()
+      if (key === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) options.redo()
+        else options.undo()
+        return
+      }
+      if (key === 'y') {
+        event.preventDefault()
+        options.redo()
+        return
+      }
+    }
 
     const max = Array.from(engine.getText()).length
 

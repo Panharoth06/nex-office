@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import EditorHiddenInput from './HiddenInput.vue'
 import { loadEngine, type TextEngine } from '~/lib/editor/useEngine'
 import type { Alignment, FormatState, ListType } from '~/lib/editor/richText'
@@ -83,6 +83,7 @@ const props = defineProps<{ docId: string }>()
 
 const emit = defineEmits<{
   (e: 'format-state', state: FormatState): void
+  (e: 'history-state', state: { canUndo: boolean; canRedo: boolean }): void
 }>()
 
 const pageWidth = 794
@@ -153,6 +154,14 @@ zones = useEditorZones({
 const { caret, composing, mirrorText, totalHeight } = painter
 let blinkTimer: number | undefined
 
+watch(
+  [zones.canUndo, zones.canRedo],
+  ([canUndo, canRedo]) => {
+    emit('history-state', { canUndo, canRedo })
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
   if (!bgCanvas.value || !docCanvas.value || !overlayCanvas.value) return
 
@@ -183,6 +192,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (blinkTimer !== undefined) window.clearInterval(blinkTimer)
   window.removeEventListener('mouseup', zones.stopSelecting)
+  zones.dispose()
   disposeSnapshotSaver()
 })
 
@@ -251,5 +261,7 @@ defineExpose({
   setParagraphStyle: zones.setParagraphStyle,
   toggleList: (type: ListType) => zones.toggleList(type),
   setAlignment: (align: Alignment) => zones.setAlignment(align),
+  undo: zones.undo,
+  redo: zones.redo,
 })
 </script>

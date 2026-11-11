@@ -38,6 +38,8 @@ export interface EditorSelectionOptions {
   updateCaret: () => void
   markTyped: () => void
   scheduleSave: () => void
+  undo: () => boolean
+  redo: () => boolean
   onFormatState: (state: FormatState) => void
 }
 
@@ -118,6 +120,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
 
     if (hasSelection.value) {
       const start = selectionStart.value
+      engine.checkpoint()
       applyInlineFormat(engine, start, selectionEnd.value, next)
       const startState = formatStateAtCaret(engine.getDelta(), start)
       pendingFormat.value = { ...startState, [key]: next[key] }
@@ -185,6 +188,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
     const end = hasSelection.value ? selectionEnd.value : start
     const inlineState = currentFormatState()
+    engine.checkpoint()
 
     for (const block of blocksForRange(engine.getDelta(), start, end)) {
       const current = blockFormatState(block)
@@ -205,6 +209,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
     const end = hasSelection.value ? selectionEnd.value : start
     const inlineState = currentFormatState()
+    engine.checkpoint()
     const next = toggleListRange(engine, start, end, type)
     if (!next) return
 
@@ -227,6 +232,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
     const end = hasSelection.value ? selectionEnd.value : start
     const inlineState = currentFormatState()
+    engine.checkpoint()
     const next = setAlignmentRange(engine, start, end, align)
     if (!next) return
 
@@ -247,6 +253,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
     const end = hasSelection.value ? selectionEnd.value : start
     const inlineState = currentFormatState()
+    engine.checkpoint()
     const next = changeListLevelRange(engine, start, end, delta)
     if (!next) return false
 
@@ -301,6 +308,8 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     insertText,
     changeListLevel,
     syncPending: syncPendingToCaret,
+    undo: options.undo,
+    redo: options.redo,
     redraw: options.redraw,
     scheduleSave: options.scheduleSave,
   })
@@ -316,6 +325,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     insertText,
     deleteSelection,
     clampSelection,
+    syncPendingToCaret,
     toggleMark,
     onKeydown,
     handleMouseDown,

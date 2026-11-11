@@ -1,6 +1,6 @@
 use loro::{
     ExpandType, ExportMode, LoroDoc, LoroEncodeError, LoroResult, LoroText, StyleConfig,
-    StyleConfigMap,
+    StyleConfigMap, UndoManager,
 };
 
 /// Editable text containers owned by a document.
@@ -52,6 +52,7 @@ fn block_style_config() -> StyleConfigMap {
 /// Thin wrapper around a Loro document that owns body, header, and footer text.
 pub struct DocumentModel {
     loro: LoroDoc,
+    undo: UndoManager,
 }
 
 impl Default for DocumentModel {
@@ -65,8 +66,10 @@ impl DocumentModel {
     pub fn new() -> Self {
         let loro = LoroDoc::new();
         loro.config_text_style(block_style_config());
+        let mut undo = UndoManager::new(&loro);
+        undo.set_merge_interval(0);
 
-        Self { loro }
+        Self { loro, undo }
     }
 
     fn text(&self, zone: TextZone) -> LoroText {
@@ -208,6 +211,43 @@ impl DocumentModel {
         serde_json::to_string(&self.text(zone).to_delta())
     }
 
+    /// Undo the most recent local edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`loro::LoroError`] when the undo step cannot be applied.
+    pub fn undo(&mut self) -> LoroResult<bool> {
+        self.undo.undo()
+    }
+
+    /// Redo the most recently undone edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`loro::LoroError`] when the redo step cannot be applied.
+    pub fn redo(&mut self) -> LoroResult<bool> {
+        self.undo.redo()
+    }
+
+    /// Whether an undo step is available.
+    pub fn can_undo(&self) -> bool {
+        self.undo.can_undo()
+    }
+
+    /// Whether a redo step is available.
+    pub fn can_redo(&self) -> bool {
+        self.undo.can_redo()
+    }
+
+    /// Close the current undo group so the next edit starts a new step.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`loro::LoroError`] when the checkpoint cannot be recorded.
+    pub fn record_checkpoint(&mut self) -> LoroResult<()> {
+        self.undo.record_new_checkpoint()
+    }
+
     /// Export a full-state Loro snapshot.
     ///
     /// # Errors
@@ -223,7 +263,9 @@ impl DocumentModel {
     ///
     /// Returns [`loro::LoroError`] when the snapshot is malformed.
     pub fn import_snapshot(&mut self, bytes: &[u8]) -> LoroResult<()> {
-        self.loro.import(bytes).map(|_| ())
+        self.loro.import(bytes)?;
+        self.undo.clear();
+        Ok(())
     }
 }
 

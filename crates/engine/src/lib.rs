@@ -224,6 +224,54 @@ impl EngineCore {
             .map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
+    /// Undo the most recent local edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the undo step cannot be applied.
+    #[wasm_bindgen]
+    pub fn undo(&mut self) -> Result<bool, JsValue> {
+        self.doc
+            .undo()
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Redo the most recently undone edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the redo step cannot be applied.
+    #[wasm_bindgen]
+    pub fn redo(&mut self) -> Result<bool, JsValue> {
+        self.doc
+            .redo()
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
+    /// Whether an undo step is available.
+    #[wasm_bindgen]
+    pub fn can_undo(&self) -> bool {
+        self.doc.can_undo()
+    }
+
+    /// Whether a redo step is available.
+    #[wasm_bindgen]
+    pub fn can_redo(&self) -> bool {
+        self.doc.can_redo()
+    }
+
+    /// Close the current undo group before a non-typing command.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error when the checkpoint cannot be recorded.
+    #[wasm_bindgen]
+    pub fn record_checkpoint(&mut self) -> Result<(), JsValue> {
+        self.doc
+            .record_checkpoint()
+            .map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
     /// Export a binary Loro snapshot.
     ///
     /// # Errors

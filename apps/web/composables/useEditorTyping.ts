@@ -55,6 +55,7 @@ export function useEditorTyping(options: EditorTypingOptions) {
     const engine = options.engine()
     if (!engine) return
 
+    engine.checkpoint()
     const result = insertParagraphAt(
       engine,
       options.caretIndex.value,

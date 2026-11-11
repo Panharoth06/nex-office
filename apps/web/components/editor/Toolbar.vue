@@ -32,6 +32,10 @@
 
     <EditorFormattingBar
       :format-state="formatState"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
+      @undo="emit('undo')"
+      @redo="emit('redo')"
       @format="emit('format', $event)"
       @paragraph="emit('paragraph', $event)"
       @list="emit('list', $event)"
@@ -104,8 +108,12 @@ const props = withDefaults(
     title: string
     docId: string
     formatState: FormatState
+    canUndo?: boolean
+    canRedo?: boolean
   }>(),
   {
+    canUndo: false,
+    canRedo: false,
     formatState: () => ({
       bold: false,
       italic: false,
@@ -120,6 +128,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'rename', title: string): void
+  (e: 'undo'): void
+  (e: 'redo'): void
   (e: 'format', key: FormatKey): void
   (e: 'paragraph', style: ParagraphStyle): void
   (e: 'list', type: ListType): void
@@ -209,6 +219,14 @@ const menus: ReadonlyArray<{ label: string; items: MenuItem[] }> = [
 ]
 
 function onMenuSelect(item: MenuItem) {
+  if (item.label === 'Undo') {
+    emit('undo')
+    return
+  }
+  if (item.label === 'Redo') {
+    emit('redo')
+    return
+  }
   console.debug('[toolbar] menu action', item.label)
 }
 </script>
