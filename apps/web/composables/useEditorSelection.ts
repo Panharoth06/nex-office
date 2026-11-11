@@ -1,6 +1,11 @@
 import { computed, ref, type Ref } from 'vue'
 import { hitTestChar, lineForIndex, type LineBox } from '~/lib/editor/textLayout'
-import { formatStateForRange, type FormatKey } from '~/lib/editor/richText'
+import {
+  EMPTY_FORMAT_STATE,
+  formatStateForRange,
+  type FormatKey,
+  type FormatState,
+} from '~/lib/editor/richText'
 import type { TextEngine } from '~/lib/editor/useEngine'
 
 export interface EditorSelectionOptions {
@@ -18,8 +23,10 @@ export interface EditorSelectionOptions {
   updateCaret: () => void
   markTyped: () => void
   scheduleSave: () => void
-  insertText: (text: string) => void
+  onFormatState: (state: FormatState) => void
 }
+
+const FORMAT_KEYS: FormatKey[] = ['bold', 'italic', 'underline']
 
 /**
  * Selection, keyboard navigation, formatting, and pointer selection for the
@@ -29,6 +36,9 @@ export interface EditorSelectionOptions {
 export function useEditorSelection(options: EditorSelectionOptions) {
   const anchorIndex = ref<number | null>(null)
   const isSelecting = ref(false)
+  // Style applied to text typed at a collapsed caret, mirroring canvas-editor's
+  // range.setDefaultStyle() behaviour.
+  const pendingFormat = ref<FormatState | null>(null)
 
   const selectionStart = computed(() =>
     anchorIndex.value === null
@@ -41,6 +51,45 @@ export function useEditorSelection(options: EditorSelectionOptions) {
       : Math.max(anchorIndex.value, options.caretIndex.value),
   )
   const hasSelection = computed(() => selectionStart.value !== selectionEnd.value)
+
+  function styleAtCaret(): FormatState {
+    const engine = options.engine()
+    if (!engine) return { ...EMPTY_FORMAT_STATE }
+    return formatStateForRange(
+      engine.getDelta(),
+      options.caretIndex.value,
+      options.caretIndex.value,
+    )
+  }
+
+  function currentFormatState(): FormatState {
+    if (hasSelection.value) {
+      const engine = options.engine()
+      if (!engine) return { ...EMPTY_FORMAT_STATE }
+      return formatStateForRange(
+        engine.getDelta(),
+        selectionStart.value,
+        selectionEnd.value,
+      )
+    }
+    return pendingFormat.value ?? styleAtCaret()
+  }
+
+  function syncPendingToCaret() {
+    pendingFormat.value = hasSelection.value ? null : styleAtCaret()
+  }
+
+  function applyFormat(
+    engine: TextEngine,
+    start: number,
+    end: number,
+    state: FormatState,
+  ) {
+    if (start >= end) return
+    for (const key of FORMAT_KEYS) {
+      engine.setMark(start, end, key, state[key])
+    }
+  }
 
   function deleteSelection(): boolean {
     const engine = options.engine()
@@ -66,14 +115,24 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     options.focus()
 
     const engine = options.engine()
-    if (!engine || !hasSelection.value) return
+    if (!engine) return
 
-    const start = selectionStart.value
-    const end = selectionEnd.value
-    const state = formatStateForRange(engine.getDelta(), start, end)
-    engine.setMark(start, end, key, !state[key])
-    options.redraw()
-    options.scheduleSave()
+    const state = currentFormatState()
+    const next = { ...state, [key]: !state[key] }
+
+    if (hasSelection.value) {
+      const start = selectionStart.value
+      const end = selectionEnd.value
+      applyFormat(engine, start, end, next)
+      pendingFormat.value = next
+      options.redraw()
+      options.scheduleSave()
+      return
+    }
+
+    // Collapsed caret: remember the style for the next typed characters.
+    pendingFormat.value = next
+    options.onFormatState(next)
   }
 
   function moveCaret(next: number, extend: boolean) {
@@ -83,6 +142,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     if (!extend) anchorIndex.value = null
 
     options.caretIndex.value = Math.max(0, next)
+    syncPendingToCaret()
     options.updateCaret()
     options.markTyped()
   }
@@ -116,8 +176,30 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     if (!extend) anchorIndex.value = null
 
     options.caretIndex.value = next
+    syncPendingToCaret()
     options.updateCaret()
     options.markTyped()
+  }
+
+  function insertText(text: string) {
+    const engine = options.engine()
+    if (!engine || !text) return
+
+    const format = currentFormatState()
+    const start = hasSelection.value ? selectionStart.value : options.caretIndex.value
+    if (hasSelection.value) {
+      engine.deleteRange(start, selectionEnd.value - start)
+      anchorIndex.value = null
+    }
+
+    engine.insertText(start, text)
+    const end = start + Array.from(text).length
+    applyFormat(engine, start, end, format)
+    options.caretIndex.value = end
+    pendingFormat.value = format
+
+    options.redraw()
+    options.scheduleSave()
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -184,7 +266,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
         break
       case 'Tab':
         event.preventDefault()
-        options.insertText('  ')
+        insertText('  ')
         break
     }
   }
@@ -200,6 +282,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     anchorIndex.value = index
     options.caretIndex.value = index
     isSelecting.value = true
+    syncPendingToCaret()
     options.redraw()
   }
 
@@ -210,6 +293,7 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     if (index === null) return
 
     options.caretIndex.value = index
+    syncPendingToCaret()
     options.redraw()
   }
 
@@ -238,6 +322,8 @@ export function useEditorSelection(options: EditorSelectionOptions) {
     selectionStart,
     selectionEnd,
     hasSelection,
+    currentFormatState,
+    insertText,
     deleteSelection,
     clampSelection,
     toggleMark,

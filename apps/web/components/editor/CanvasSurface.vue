@@ -74,10 +74,8 @@ import { layoutChars, caretRect, hitTestChar, lineForIndex, type LineBox } from 
 import { drawPageBackground, setupCanvas } from '~/lib/editor/canvas'
 import { loadEngine, type TextEngine } from '~/lib/editor/useEngine'
 import {
-  formatStateForRange,
   styledCharsFromDelta,
   type FormatState,
-  type TextDeltaSegment,
 } from '~/lib/editor/richText'
 import { drawRichDocument } from '~/lib/editor/renderDocument'
 import { useEditorSelection } from '~/composables/useEditorSelection'
@@ -127,7 +125,8 @@ const {
 const {
   selectionStart,
   selectionEnd,
-  deleteSelection,
+  currentFormatState,
+  insertText,
   clampSelection,
   toggleMark,
   onKeydown,
@@ -149,7 +148,7 @@ const {
   updateCaret,
   markTyped,
   scheduleSave,
-  insertText: onTextInput,
+  onFormatState: emitFormatState,
 })
 
 let docCtx: CanvasRenderingContext2D | null = null
@@ -225,14 +224,14 @@ function redraw() {
     lineHeight,
   })
 
-  updateCaret(delta)
+  updateCaret()
   markTyped()
 }
 
-function updateCaret(delta?: TextDeltaSegment[]) {
+function updateCaret() {
   if (!docCtx) return
   caret.value = caretRect(docCtx, lines.value, caretIndex.value, margin, lineHeight)
-  emitFormatState(delta)
+  emitFormatState()
 }
 
 function drawOverlay() {
@@ -264,16 +263,8 @@ function markTyped() {
   drawOverlay()
 }
 
-function emitFormatState(delta?: TextDeltaSegment[]) {
-  if (!engine.value) return
-  emit(
-    'format-state',
-    formatStateForRange(
-      delta ?? engine.value.getDelta(),
-      selectionStart.value,
-      selectionEnd.value,
-    ),
-  )
+function emitFormatState() {
+  emit('format-state', currentFormatState())
 }
 
 function focus() {
@@ -281,14 +272,8 @@ function focus() {
 }
 
 function onTextInput(text: string) {
-  if (!engine.value || !text) return
-
-  deleteSelection()
-  engine.value.insertText(caretIndex.value, text)
-  caretIndex.value += Array.from(text).length
-  composing.value = ''
-  redraw()
-  scheduleSave()
+  if (!text) return
+  insertText(text)
 }
 
 
