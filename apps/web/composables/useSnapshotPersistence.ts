@@ -18,8 +18,10 @@ export function useSnapshotPersistence(
   isReady: () => boolean,
 ) {
   const saveState = ref<'saving' | 'saved' | 'error'>('saved')
-  let saveTimer: number | undefined
+  let saveTimer: ReturnType<typeof setTimeout> | undefined
   let dirty = false
+  let editRevision = 0
+  let flushChain = Promise.resolve()
 
   const label = computed(() => {
     if (saveState.value === 'saving') return 'Saving…'
@@ -33,6 +35,7 @@ export function useSnapshotPersistence(
 
   function markLoaded() {
     dirty = false
+    editRevision = 0
     saveState.value = 'saved'
   }
 
@@ -40,26 +43,42 @@ export function useSnapshotPersistence(
     if (!isReady() || !engine()) return
 
     dirty = true
+    editRevision += 1
     saveState.value = 'saving'
     if (saveTimer !== undefined) {
-      window.clearTimeout(saveTimer)
+      clearTimeout(saveTimer)
     }
-    saveTimer = window.setTimeout(() => {
+    saveTimer = setTimeout(() => {
       saveTimer = undefined
       void flush()
     }, 800)
   }
 
   async function flush() {
+    flushChain = flushChain.then(savePending)
+    return flushChain
+  }
+
+  async function savePending() {
     const current = engine()
     if (!current || !isReady() || !dirty) return
 
+    const revision = editRevision
     saveState.value = 'saving'
     try {
-      await saveSnapshot(docId, current.exportSnapshot())
-      dirty = false
-      saveState.value = 'saved'
+      const snapshot = current.exportSnapshot()
+      await saveSnapshot(docId, snapshot)
+      if (editRevision === revision) {
+        dirty = false
+        saveState.value = 'saved'
+      } else {
+        // An edit landed while this snapshot was in flight. The newer debounce
+        // timer will save again; keep the state dirty until it succeeds.
+        dirty = true
+        saveState.value = 'saving'
+      }
     } catch (error) {
+      dirty = true
       saveState.value = 'error'
       console.warn('[editor] snapshot save failed', error)
     }
@@ -67,7 +86,7 @@ export function useSnapshotPersistence(
 
   function dispose() {
     if (saveTimer !== undefined) {
-      window.clearTimeout(saveTimer)
+      clearTimeout(saveTimer)
       saveTimer = undefined
     }
     if (dirty && engine() && isReady()) {
