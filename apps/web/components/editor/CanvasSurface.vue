@@ -36,6 +36,9 @@
         :cursor-y="caret.y"
         @input="onTextInput"
         @keydown="onKeydown"
+        @copy="onCopy"
+        @cut="onCut"
+        @paste="onPaste"
         @composition="onComposition"
       />
 
@@ -70,6 +73,7 @@ import EditorHiddenInput from './HiddenInput.vue'
 import { loadEngine, type TextEngine } from '~/lib/editor/useEngine'
 import type { Alignment, FormatState, ListType } from '~/lib/editor/richText'
 import { zoneAtPoint } from '~/lib/editor/zones'
+import { readClipboard, writeClipboard } from '~/lib/editor/clipboard'
 import type { LineBox } from '~/lib/editor/textLayout'
 import { useEditorPainter } from '~/composables/useEditorPainter'
 import {
@@ -243,6 +247,30 @@ function onTextInput(text: string) {
 
 function onKeydown(event: KeyboardEvent) {
   zones.onKeydown(event)
+}
+
+function onCopy(event: ClipboardEvent) {
+  const chars = zones.selectedChars()
+  if (chars.length === 0 || !event.clipboardData) return
+  event.preventDefault()
+  writeClipboard(event.clipboardData, chars)
+}
+
+function onCut(event: ClipboardEvent) {
+  const chars = zones.selectedChars()
+  if (chars.length === 0 || !event.clipboardData) return
+  event.preventDefault()
+  writeClipboard(event.clipboardData, chars)
+  zones.deleteSelection()
+}
+
+function onPaste(event: ClipboardEvent) {
+  if (!event.clipboardData) return
+  event.preventDefault()
+  const payload = readClipboard(event.clipboardData)
+  if (!payload) return
+  if (payload.kind === 'rich') zones.pasteStyled(payload.chars)
+  else zones.pasteText(payload.text)
 }
 
 function onComposition(text: string, isEnd: boolean) {

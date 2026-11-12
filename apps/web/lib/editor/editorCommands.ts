@@ -5,6 +5,7 @@ import {
   type FormatState,
   type TextDeltaSegment,
 } from './richText'
+import type { StyledChar, TextStyle } from './textLayout'
 import type { TextEngine } from './useEngine'
 
 const INLINE_KEYS: FormatKey[] = ['bold', 'italic', 'underline']
@@ -94,6 +95,53 @@ export function applyBlockState(
       state,
     )
   }
+}
+
+/** Insert styled characters and apply their inline and block marks. */
+export function insertStyledChars(
+  engine: TextEngine,
+  pos: number,
+  chars: StyledChar[],
+): number {
+  if (chars.length === 0) return pos
+
+  engine.insertText(
+    pos,
+    chars.map((item) => item.char).join(''),
+  )
+
+  let start = 0
+  while (start < chars.length) {
+    let end = start + 1
+    while (end < chars.length && sameTextStyle(chars[end].style, chars[start].style)) {
+      end += 1
+    }
+    const style = chars[start].style
+    applyFullFormat(engine, pos + start, pos + end, {
+      bold: style.bold === true,
+      italic: style.italic === true,
+      underline: style.underline === true,
+      paragraph: style.paragraph ?? 'normal',
+      list: style.list ?? null,
+      listLevel: style.listLevel ?? 0,
+      align: style.align ?? 'left',
+    })
+    start = end
+  }
+
+  return pos + chars.length
+}
+
+function sameTextStyle(a: TextStyle, b: TextStyle): boolean {
+  return (
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.underline === b.underline &&
+    (a.paragraph ?? 'normal') === (b.paragraph ?? 'normal') &&
+    (a.list ?? null) === (b.list ?? null) &&
+    (a.listLevel ?? 0) === (b.listLevel ?? 0) &&
+    (a.align ?? 'left') === (b.align ?? 'left')
+  )
 }
 
 /** Apply the complete formatting state to freshly inserted text. */

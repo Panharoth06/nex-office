@@ -15,6 +15,9 @@
     aria-label="Document editor input"
     @input="handleInput"
     @keydown="handleKeydown"
+    @copy="emit('copy', $event)"
+    @cut="emit('cut', $event)"
+    @paste="emit('paste', $event)"
     @compositionstart="handleCompositionStart"
     @compositionupdate="handleCompositionUpdate"
     @compositionend="handleCompositionEnd"
@@ -32,6 +35,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'input', text: string): void
   (e: 'keydown', event: KeyboardEvent): void
+  (e: 'copy', event: ClipboardEvent): void
+  (e: 'cut', event: ClipboardEvent): void
+  (e: 'paste', event: ClipboardEvent): void
   (e: 'composition', text: string, isEnd: boolean): void
 }>()
 

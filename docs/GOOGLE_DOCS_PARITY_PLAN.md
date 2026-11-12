@@ -104,6 +104,8 @@ repository is not. Implement our own code and tests after studying it.
       formatting, caret/selection routing, and body margin growth.
 - [x] Undo/redo via Loro's undo manager, with keyboard shortcuts, toolbar
       buttons, edit-menu actions, and pause-based typing groups.
+- [x] Clipboard: copy, cut, and paste with internal rich fragments, plain-text
+      fallback, and basic HTML import/export.
 - [ ] Different first-page/odd-even headers, page-number fields, and
       section-specific headers/footers.
 - [ ] Paragraph spacing, indentation outside lists, justified alignment, and
@@ -130,6 +132,12 @@ Undo/redo uses Loro's `UndoManager` with explicit checkpoints rather than
 persisted history. Typing groups close after a short pause, and formatting,
 list, and paragraph commands close the current group before mutating. History is
 in memory and starts empty after a snapshot reload.
+
+Clipboard copy/cut/paste uses native clipboard events on the hidden input. It
+writes plain text, HTML, and an internal `application/x-nex-office-fragment`
+payload; internal paste preserves body, header, and footer formatting exactly.
+External HTML paste supports paragraphs, headings, lists, line breaks, and
+bold/italic/underline. Tables, images, and comments are not yet imported.
 
 ### Phase 2 — Collaboration
 - Loro relay, Redis pub/sub, presence, snapshot flush, reconnect.

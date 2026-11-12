@@ -6,8 +6,10 @@ import type {
   ListType,
   ParagraphStyle,
 } from '~/lib/editor/richText'
-import type { LineBox } from '~/lib/editor/textLayout'
+import type { LineBox, StyledChar } from '~/lib/editor/textLayout'
+import { charsFromDelta } from '~/lib/editor/clipboard'
 import { engineForZone, type TextEngine } from '~/lib/editor/useEngine'
+import { insertStyledChars } from '~/lib/editor/editorCommands'
 import type { EditorZone } from '~/lib/editor/zones'
 import { useEditorSelection } from '~/composables/useEditorSelection'
 
@@ -36,6 +38,7 @@ interface ZoneSelection {
   toggleList: (type: ListType) => void
   setAlignment: (align: Alignment) => void
   insertText: (text: string) => void
+  deleteSelection: () => boolean
   clampSelection: (max: number) => void
   syncPendingToCaret: () => void
   toggleMark: (key: FormatKey) => void
@@ -112,7 +115,6 @@ export function useEditorZones(options: EditorZonesOptions) {
   const activeSelection = computed(() => selections[activeZone.value])
   const selectionStart = computed(() => activeSelection.value.selectionStart.value)
   const selectionEnd = computed(() => activeSelection.value.selectionEnd.value)
-  const hasSelection = computed(() => selectionStart.value !== selectionEnd.value)
   const caretIndex = computed(() => carets[activeZone.value].value)
 
   function currentFormatState(): FormatState {
@@ -225,6 +227,59 @@ export function useEditorZones(options: EditorZonesOptions) {
     activeSelection.value.insertText(text)
   }
 
+  function selectedChars(): StyledChar[] {
+    const engine = options.engine()
+    const start = selectionStart.value
+    const end = selectionEnd.value
+    if (!engine || start >= end) return []
+    return charsFromDelta(engine.getDelta(activeZone.value), start, end)
+  }
+
+  function deleteSelection(): boolean {
+    const engine = options.engine()
+    if (!engine) return false
+
+    engine.checkpoint()
+    if (!activeSelection.value.deleteSelection()) return false
+    options.redraw()
+    syncSelections()
+    options.updateCaret()
+    options.onFormatState(currentFormatState())
+    options.scheduleSave()
+    options.focus()
+    return true
+  }
+
+  function pasteText(text: string) {
+    const engine = options.engine()
+    if (!engine || !text) return
+    engine.checkpoint()
+    activeSelection.value.insertText(text)
+  }
+
+  function pasteStyled(chars: StyledChar[]) {
+    const base = options.engine()
+    if (!base || chars.length === 0) return
+
+    const zone = activeZone.value
+    const engine = zonedEngine(zone)
+    if (!engine) return
+
+    engine.checkpoint()
+    if (selectionStart.value !== selectionEnd.value) {
+      activeSelection.value.deleteSelection()
+    }
+
+    const start = carets[zone].value
+    carets[zone].value = insertStyledChars(engine, start, chars)
+    options.redraw()
+    syncSelections()
+    options.updateCaret()
+    options.onFormatState(currentFormatState())
+    options.scheduleSave()
+    options.focus()
+  }
+
   function toggleMark(key: FormatKey) {
     activeSelection.value.toggleMark(key)
   }
@@ -266,19 +321,21 @@ export function useEditorZones(options: EditorZonesOptions) {
     caretIndex,
     selectionStart,
     selectionEnd,
-    hasSelection,
     currentFormatState,
     refreshHistory,
     undo,
     redo,
     setZone,
-    setActivePage,
     clampActivePage,
     handleMouseDown,
     handleMouseMove,
     stopSelecting,
     onKeydown,
     insertText,
+    selectedChars,
+    deleteSelection,
+    pasteText,
+    pasteStyled,
     toggleMark,
     setParagraphStyle,
     toggleList,

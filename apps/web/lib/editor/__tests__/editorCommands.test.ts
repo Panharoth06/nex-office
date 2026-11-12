@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   changeListLevelRange,
   insertParagraphAt,
+  insertStyledChars,
   setAlignmentRange,
   toggleListRange,
 } from '../editorCommands'
@@ -197,6 +198,22 @@ describe('editorCommands block editing', () => {
 
     changeListLevelRange(engine, 0, 3, -1)
     expect(formatStateAtCaret(engine.getDelta(), 1).list).toBeNull()
+  })
+
+  it('inserts styled clipboard characters with marks intact', () => {
+    const engine = new FakeEngine('')
+    insertStyledChars(engine, 0, [
+      { char: 'B', style: { bold: true } },
+      { char: 'o', style: { bold: true } },
+      { char: 'l', style: { bold: true } },
+      { char: 'd', style: { bold: true } },
+      { char: ' ', style: { bold: false } },
+      { char: 'x', style: {} },
+    ])
+
+    expect(engine.getText()).toBe('Bold x')
+    expect(formatStateAtCaret(engine.getDelta(), 1).bold).toBe(true)
+    expect(formatStateAtCaret(engine.getDelta(), 5).bold).toBe(false)
   })
 
   it('applies alignment to every selected paragraph', () => {
