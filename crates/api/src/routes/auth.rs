@@ -15,6 +15,12 @@ pub struct MeResponse {
     pub user: SessionUser,
 }
 
+#[derive(Debug, Serialize)]
+pub struct AuthConfigResponse {
+    pub oidc_enabled: bool,
+    pub dev_auth: bool,
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct DevLoginRequest {
     pub email: Option<String>,
@@ -24,11 +30,20 @@ pub struct DevLoginRequest {
 /// Authentication routes mounted under `/api/auth`.
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/config", get(config))
         .route("/me", get(me))
         .route("/logout", post(logout))
         .route("/dev-login", post(dev_login))
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
+}
+
+/// Return which sign-in methods this deployment supports.
+pub async fn config(State(state): State<AppState>) -> Json<AuthConfigResponse> {
+    Json(AuthConfigResponse {
+        oidc_enabled: state.config.oidc.is_some(),
+        dev_auth: state.config.dev_auth,
+    })
 }
 
 /// Return the currently signed-in user.

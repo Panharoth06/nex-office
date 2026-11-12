@@ -12,6 +12,7 @@
       </div>
 
       <a
+        v-if="oidcEnabled"
         :href="ssoUrl"
         class="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
       >
@@ -19,18 +20,26 @@
         Continue with SSO
       </a>
 
-      <p class="mt-2 text-center text-[10px] text-slate-400">
-        OIDC must be configured with <code>OIDC_ISSUER</code> and client credentials.
-      </p>
+      <div
+        v-else-if="configLoaded"
+        class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800"
+      >
+        SSO is not configured on this deployment. Use the local dev sign-in below.
+      </div>
 
       <template v-if="devAuth">
-        <div class="my-6 flex items-center gap-3">
+        <div v-if="oidcEnabled" class="my-6 flex items-center gap-3">
           <span class="h-px flex-1 bg-slate-200" />
           <span class="text-[10px] font-medium uppercase tracking-wider text-slate-400">or</span>
           <span class="h-px flex-1 bg-slate-200" />
         </div>
 
-        <UiButton variant="secondary" block :loading="busy" @click="signInWithDev">
+        <UiButton
+          :variant="oidcEnabled ? 'secondary' : 'primary'"
+          block
+          :loading="busy"
+          @click="signInWithDev"
+        >
           <UserRound class="h-4 w-4" aria-hidden="true" />
           Continue as local dev user
         </UiButton>
@@ -38,6 +47,14 @@
           Enabled by <code>DEV_AUTH</code>. Never enable this in production.
         </p>
       </template>
+
+      <p
+        v-if="configLoaded && !oidcEnabled && !devAuth"
+        class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+      >
+        No sign-in method is configured. Set <code>OIDC_ISSUER</code> and client
+        credentials, or enable <code>DEV_AUTH</code> for local development.
+      </p>
 
       <p v-if="error" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
         {{ error }}
@@ -50,10 +67,20 @@
 import { computed, onMounted, ref } from 'vue'
 import { KeyRound, UserRound } from 'lucide-vue-next'
 import UiButton from '~/components/shared/UiButton.vue'
-import { devLogin, getMe } from '~/lib/api/documents'
+import {
+  devLogin,
+  getAuthConfig,
+  getMe,
+  type AuthConfig,
+} from '~/lib/api/documents'
 
 const config = useRuntimeConfig()
-const devAuth = computed(() => Boolean(config.public.devAuth))
+const authConfig = ref<AuthConfig | null>(null)
+const configLoaded = ref(false)
+const devAuth = computed(
+  () => authConfig.value?.dev_auth ?? Boolean(config.public.devAuth),
+)
+const oidcEnabled = computed(() => authConfig.value?.oidc_enabled ?? false)
 const ssoUrl = computed(() => {
   const base = String(config.public.apiBase || '').replace(/\/$/, '')
   return `${base}/api/auth/oidc/start`
@@ -66,8 +93,17 @@ onMounted(async () => {
   try {
     await getMe()
     await navigateTo('/')
+    return
   } catch {
-    // Signed out; stay on the login page.
+    // Signed out; load the available sign-in methods.
+  }
+
+  try {
+    authConfig.value = await getAuthConfig()
+  } catch {
+    // Fall back to the public dev-auth flag.
+  } finally {
+    configLoaded.value = true
   }
 })
 
@@ -78,7 +114,7 @@ async function signInWithDev() {
     await devLogin()
     await navigateTo('/')
   } catch {
-    error.value = 'Local dev sign-in is unavailable. Is DEV_AUTH enabled?'
+    error.value = 'Could not start a local dev session. Is DEV_AUTH enabled?'
   } finally {
     busy.value = false
   }

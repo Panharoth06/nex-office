@@ -26,6 +26,11 @@ export interface SessionUser {
   name: string
 }
 
+export interface AuthConfig {
+  oidc_enabled: boolean
+  dev_auth: boolean
+}
+
 export interface SnapshotVersion {
   version: number
 }
@@ -83,6 +88,10 @@ export function saveSnapshot(id: string, bytes: Uint8Array): Promise<SnapshotVer
 
 export function getMe(): Promise<{ user: SessionUser }> {
   return $fetch<{ user: SessionUser }>('/api/auth/me')
+}
+
+export function getAuthConfig(): Promise<AuthConfig> {
+  return $fetch<AuthConfig>('/api/auth/config')
 }
 
 export function devLogin(input?: { email?: string; name?: string }): Promise<{ user: SessionUser }> {
